@@ -28,7 +28,7 @@ const app = express()
 const PORT = process.env.PORT || 5000
 
 const corsOptions = {
-    origin: 'https://trimz-frontend.onrender.com/', // Frontend URL
+    origin: 'https://trimz-frontend.onrender.com', // Frontend URL
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'], // Include PATCH
     allowedHeaders: ['Content-Type', 'Authorization'], // Allow necessary headers
