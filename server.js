@@ -28,7 +28,7 @@ const app = express()
 const PORT = process.env.PORT || 5000
 
 const corsOptions = {
-    origin: 'http://localhost:5173', // Frontend URL
+    origin: 'https://trimz-frontend.onrender.com/', // Frontend URL
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'], // Include PATCH
     allowedHeaders: ['Content-Type', 'Authorization'], // Allow necessary headers
@@ -79,5 +79,5 @@ export const appointmentIsActive = (appointmentObject) => {
 
 app.listen(PORT, () => {
     connectDB()
-    console.log("Server started at http://localhost:" + PORT);
+    console.log("Server started at https://trimz-backend.onrender.com/" + PORT);
 });
