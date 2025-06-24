@@ -1,6 +1,6 @@
 ## Zeal Craft Innovation Developers Team
 # Trimz
-
+# Trimz-Backend
 ## Trimz Website
 Trimz is a barbering service booking app designed for students at the University of Ghana, Legon. This app allows students to book individual barbers for on-demand, personalized barbering services. Barbers are registered on the platform, allowing students to browse profiles and book their preferred barber based on availability.
 
