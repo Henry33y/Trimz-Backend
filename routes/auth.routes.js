@@ -21,9 +21,14 @@ loginRouter.get('/auth/google/callback', passport.authenticate('google', { failu
   const { token } = req.user;
   const { role } = req.user.user;
   res.cookie('jwt', token, { httpOnly: true });
-  console.log(req.user);
-  // res.status(200).json({ success: true, message: 'Login successful', token, data: req.user });
-  res.redirect(`${frontend_URL}/${role == 'customer' ? 'users/profile/me' : 'barbers/profile/me'}?token=${token}&method=googleoauth`); // Redirect to dashboard after login
+  console.log('OAuth user:', req.user);
+
+  // Normalize frontend URL and use a hash-fragment redirect so the static host doesn't return 404
+  const frontendBase = (process.env.FRONTEND_URL || frontend_URL || 'http://localhost:5173').replace(/\/+$/, '');
+  const targetPath = role === 'customer' ? 'users/profile/me' : 'barbers/profile/me';
+  const redirectUrl = `${frontendBase}/#/${targetPath}?token=${encodeURIComponent(token)}&method=googleoauth`;
+  console.log('Redirecting to:', redirectUrl);
+  res.redirect(redirectUrl);
 });
 
 export default loginRouter
