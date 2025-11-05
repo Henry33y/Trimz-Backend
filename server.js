@@ -27,28 +27,52 @@ dotenv.config()
 const app = express()
 const PORT = process.env.PORT || 5000
 
-const corsOptions = {
-    origin: 'https://trimz-k1mq.onrender.com', // Frontend URL
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'], // Include PATCH
-    allowedHeaders: ['Content-Type', 'Authorization'], // Allow necessary headers
-    // allowedHeaders: ['Content-Type', 'Authorization'], // Allow necessary headers
-};
-app.use('*', cors(corsOptions))
+// CORS: allow both local and production frontends via env
+const FRONTEND_URL = process.env.FRONTEND_URL?.replace(/\/$/, '');
+const LOCAL_FRONTEND_URL = (process.env.LOCAL_FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+const allowedOrigins = [FRONTEND_URL, LOCAL_FRONTEND_URL].filter(Boolean);
 
-app.use(express.json()) //allows us to accept json data in the req.body
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow REST tools without origin (e.g., Postman) and same-origin
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error(`Not allowed by CORS: ${origin}`));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-csrf-token'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  maxAge: 600
+}));
+
+// Security headers middleware
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  next();
+});
+
+// Body parsing middleware
+app.use(express.json({ limit: '10mb' })); // Limit JSON body size
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
-app.use(passport.initialize())
 
-app.use("/api/users", userRouter)
-app.use("/api/services", serviceRouter)
-app.use("/api/reviews", reviewRouter)
-app.use("/api/provider-services", providerServiceRouter)
-app.use("/api/audit-logs", auditRouter)
-app.use("/api/appointments", appointmentRouter)
-app.use("/api", loginRouter)
-app.use("/api/users/gallery", galleryRouter)
-app.use("/api/rating", ratingRouter)
+// Initialize authentication
+app.use(passport.initialize());
+
+// API Routes
+app.use("/api/users", userRouter);
+app.use("/api/services", serviceRouter);
+app.use("/api/reviews", reviewRouter);
+app.use("/api/provider-services", providerServiceRouter);
+app.use("/api/audit-logs", auditRouter);
+app.use("/api/appointments", appointmentRouter);
+app.use("/api", loginRouter);
+app.use("/api/users/gallery", galleryRouter);
+app.use("/api/rating", ratingRouter);
 app.use('/api/notifications', notificationRouter);
 
 //cron job
@@ -76,8 +100,57 @@ export const appointmentIsActive = (appointmentObject) => {
     return false
 }
 
-
-app.listen(PORT, () => {
-    connectDB()
-    console.log("Server started at https://trimz-backend-fo3j.onrender.com" + PORT);
+// Global error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(err.status || 500).json({
+    message: err.message || 'Internal Server Error',
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  });
 });
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  process.exit(1);
+});
+
+// Connect to database and start server
+const startServer = async () => {
+  try {
+    await connectDB();
+    console.log('MongoDB Connected Successfully');
+    
+    const server = app.listen(PORT, () => {
+      console.log(`Server is running on port ${PORT}`);
+      if (process.env.NODE_ENV === 'production') {
+        console.log('Production server started at:', process.env.BACKEND_URL);
+      } else {
+        console.log('Development server started at:', `http://localhost:${PORT}`);
+      }
+    });
+
+    // Graceful shutdown
+    const shutdown = () => {
+      console.log('Shutting down gracefully...');
+      server.close(() => {
+        console.log('Server closed');
+        process.exit(0);
+      });
+    };
+
+    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', shutdown);
+    
+  } catch (error) {
+    console.error('Failed to connect to MongoDB:', error);
+    process.exit(1);
+  }
+};
+
+startServer();
