@@ -10,6 +10,8 @@ export const requireAuth = (req, res, next) => {
   
     jwt.verify(token, process.env.JWT_SECRET, (err, decodedToken) => {
       if (err) {
+        // Log the verification error to help debug signature/expiration issues
+        console.error('JWT verify error:', err && err.message ? err.message : err);
         return res.status(401).json({ success: false, message: 'Invalid token' });
       } else {
         req.user = decodedToken; // Attach user ID to the request

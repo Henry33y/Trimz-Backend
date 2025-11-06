@@ -3,6 +3,7 @@ import { Strategy as GoogleStrategy } from 'passport-google-oauth2';
 import jwt from 'jsonwebtoken';
 import User from '../models/user.model.js';
 import dotenv from 'dotenv'
+import cloudinary from './cloudinary.config.js';
 import { createAuditLog } from '../controllers/audit.controller.js';
 
 dotenv.config()
