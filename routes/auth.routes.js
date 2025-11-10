@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken'
 import passport from "passport";
 import { forgotPasswordController, login, logout, resetPasswordController } from "../controllers/auth.controller.js";
 import dotenv from 'dotenv'
+import { getFrontendBase } from '../config/frontendUrl.js'
 
 dotenv.config()
 
@@ -26,12 +27,9 @@ loginRouter.get(
     res.cookie('jwt', token, { httpOnly: true });
     console.log('OAuth user:', req.user);
 
-    // Choose frontend base depending on environment
-    const isProd = process.env.NODE_ENV === 'production';
-    const baseCandidate = isProd
-      ? (process.env.FRONTEND_URL || frontend_URL)
-      : (process.env.LOCAL_FRONTEND_URL || 'http://localhost:5173');
-    const frontendBase = (baseCandidate || 'http://localhost:5173').replace(/\/+$/, '');
+    // Resolve frontend base via helper
+    const frontendBase = getFrontendBase().replace(/\/+$/, '');
+    console.log('Frontend base resolved to:', frontendBase);
 
     // Use a hash-fragment route so the static host doesn't 404 on refresh
     const targetPath = role === 'customer' ? 'users/profile/me' : 'barbers/profile/me';

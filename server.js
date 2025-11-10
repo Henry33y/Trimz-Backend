@@ -12,6 +12,7 @@ import providerServiceRouter from "./routes/providerService.routes.js"
 import appointmentRouter from "./routes/appointment.routes.js"
 import auditRouter from "./routes/audit.routes.js"
 import cors from 'cors'
+import { getAllowedOrigins } from './config/frontendUrl.js'
 import loginRouter from "./routes/auth.routes.js"
 import cookieParser from "cookie-parser"
 import cloudinary from "./config/cloudinary.config.js"
@@ -27,10 +28,8 @@ dotenv.config()
 const app = express()
 const PORT = process.env.PORT || 5000
 
-// CORS: allow both local and production frontends via env
-const FRONTEND_URL = process.env.FRONTEND_URL?.replace(/\/$/, '');
-const LOCAL_FRONTEND_URL = (process.env.LOCAL_FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
-const allowedOrigins = [FRONTEND_URL, LOCAL_FRONTEND_URL].filter(Boolean);
+// CORS: allow both local and production frontends via helper
+const allowedOrigins = getAllowedOrigins();
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -130,8 +129,10 @@ const startServer = async () => {
       console.log(`Server is running on port ${PORT}`);
       if (process.env.NODE_ENV === 'production') {
         console.log('Production server started at:', process.env.BACKEND_URL);
+        console.log('Allowed frontend origins:', allowedOrigins.join(', '));
       } else {
         console.log('Development server started at:', `http://localhost:${PORT}`);
+        console.log('Allowed frontend origins:', allowedOrigins.join(', '));
       }
     });
 
