@@ -31,9 +31,9 @@ loginRouter.get(
     const frontendBase = getFrontendBase().replace(/\/+$/, '');
     console.log('Frontend base resolved to:', frontendBase);
 
-    // Use a hash-fragment route so the static host doesn't 404 on refresh
-    const targetPath = role === 'customer' ? 'users/profile/me' : 'barbers/profile/me';
-    const redirectUrl = `${frontendBase}/#/${targetPath}?token=${encodeURIComponent(token)}&method=googleoauth`;
+    // Redirect to a clean callback route handled by BrowserRouter on the frontend
+    const targetPath = role === 'customer' ? '/users/profile/me' : '/barbers/profile/me';
+    const redirectUrl = `${frontendBase}/auth/callback?token=${encodeURIComponent(token)}&to=${encodeURIComponent(targetPath)}&method=googleoauth`;
     console.log('Redirecting to:', redirectUrl);
     res.redirect(redirectUrl);
   }
