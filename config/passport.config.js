@@ -17,19 +17,28 @@ function stripTrailingSlash(u) {
 
 const port = process.env.PORT || 5000;
 const nodeEnv = process.env.NODE_ENV || 'development';
-const backendBase = stripTrailingSlash(
+let backendBase = stripTrailingSlash(
   // Prefer explicit BACKEND_URL when present
   process.env.BACKEND_URL || (nodeEnv === 'production'
     ? ''
     : `http://localhost:${port}`)
 );
 
+// In production, always prefer https scheme for safety and Google OAuth
+if (nodeEnv === 'production' && backendBase.startsWith('http://')) {
+  backendBase = backendBase.replace(/^http:\/\//, 'https://');
+}
+
 // If GOOGLE_CALLBACK_URL is explicitly provided, use it; otherwise derive
 const derivedCallback = backendBase
   ? `${backendBase}/api/auth/google/callback`
   : `http://localhost:${port}/api/auth/google/callback`;
 
-const CALLBACK_URL = stripTrailingSlash(process.env.GOOGLE_CALLBACK_URL || derivedCallback);
+// If an explicit env is provided, normalize to https in production
+let CALLBACK_URL = stripTrailingSlash(process.env.GOOGLE_CALLBACK_URL || derivedCallback);
+if (nodeEnv === 'production' && CALLBACK_URL.startsWith('http://')) {
+  CALLBACK_URL = CALLBACK_URL.replace(/^http:\/\//, 'https://');
+}
 
 passport.use(new GoogleStrategy(
   {
