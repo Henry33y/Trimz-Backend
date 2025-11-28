@@ -10,11 +10,32 @@ dotenv.config()
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
+// Build a robust callback URL that matches the deployed backend host
+function stripTrailingSlash(u) {
+  return (u || '').replace(/\/$/, '');
+}
+
+const port = process.env.PORT || 5000;
+const nodeEnv = process.env.NODE_ENV || 'development';
+const backendBase = stripTrailingSlash(
+  // Prefer explicit BACKEND_URL when present
+  process.env.BACKEND_URL || (nodeEnv === 'production'
+    ? ''
+    : `http://localhost:${port}`)
+);
+
+// If GOOGLE_CALLBACK_URL is explicitly provided, use it; otherwise derive
+const derivedCallback = backendBase
+  ? `${backendBase}/api/auth/google/callback`
+  : `http://localhost:${port}/api/auth/google/callback`;
+
+const CALLBACK_URL = stripTrailingSlash(process.env.GOOGLE_CALLBACK_URL || derivedCallback);
+
 passport.use(new GoogleStrategy(
   {
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: process.env.GOOGLE_CALLBACK_URL,
+    callbackURL: CALLBACK_URL,
     passReqToCallback: true,
   },
   async (request, accessToken, refreshToken, profile, done) => {
