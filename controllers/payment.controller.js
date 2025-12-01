@@ -1,3 +1,6 @@
+import dotenv from 'dotenv';
+// Ensure environment variables are loaded even if server entry loads dotenv too late
+dotenv.config();
 import Appointment from '../models/appointment.model.js';
 import ProviderService from '../models/providerService.model.js';
 import User from '../models/user.model.js';
@@ -5,7 +8,12 @@ import { getFrontendBase } from '../config/frontendUrl.js';
 import crypto from 'crypto';
 
 const PAYSTACK_BASE = process.env.PAYSTACK_BASE_URL || 'https://api.paystack.co';
-const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET_KEY;
+// Support alternate env names and ensure we re-read on each access if needed.
+// Keep a getter to allow hot-reload scenarios where env might be injected later.
+function getPaystackSecret() {
+  return process.env.PAYSTACK_SECRET_KEY || process.env.PAYSTACK_SECRET || process.env.paystack_secret_key;
+}
+const PAYSTACK_SECRET = getPaystackSecret();
 const PAYSTACK_CURRENCY = process.env.PAYSTACK_CURRENCY || 'GHS';
 
 function toMinorUnits(amountNumber) {
@@ -18,7 +26,8 @@ export const initPaystackPayment = async (req, res) => {
   try {
     const { appointmentId } = req.body;
     if (!appointmentId) return res.status(400).json({ success: false, message: 'appointmentId is required' });
-    if (!PAYSTACK_SECRET) return res.status(500).json({ success: false, message: 'PAYSTACK_SECRET_KEY is not configured' });
+    const secret = getPaystackSecret();
+    if (!secret) return res.status(500).json({ success: false, message: 'PAYSTACK_SECRET_KEY is not configured' });
 
     // Load appointment and ensure the requester is the customer
     const appt = await Appointment.findById(appointmentId).populate('customer', 'email name').lean();
@@ -68,7 +77,7 @@ export const initPaystackPayment = async (req, res) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${PAYSTACK_SECRET}`
+        'Authorization': `Bearer ${secret}`
       },
       body: JSON.stringify(payload)
     });
@@ -92,10 +101,11 @@ export const verifyPaystackPayment = async (req, res) => {
   try {
     const { reference } = req.body || {};
     if (!reference) return res.status(400).json({ success: false, message: 'reference is required' });
-    if (!PAYSTACK_SECRET) return res.status(500).json({ success: false, message: 'PAYSTACK_SECRET_KEY is not configured' });
+    const secret = getPaystackSecret();
+    if (!secret) return res.status(500).json({ success: false, message: 'PAYSTACK_SECRET_KEY is not configured' });
 
     const resp = await fetch(`${PAYSTACK_BASE}/transaction/verify/${encodeURIComponent(reference)}`, {
-      headers: { 'Authorization': `Bearer ${PAYSTACK_SECRET}` }
+      headers: { 'Authorization': `Bearer ${secret}` }
     });
     const json = await resp.json();
 
@@ -131,7 +141,7 @@ export const paystackWebhook = async (req, res) => {
 
     // req.body is a raw buffer (configured in server.js before json middleware)
     const hmac = crypto
-      .createHmac('sha512', PAYSTACK_SECRET)
+      .createHmac('sha512', getPaystackSecret())
       .update(req.body)
       .digest('hex');
 
