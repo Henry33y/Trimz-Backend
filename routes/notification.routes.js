@@ -89,6 +89,20 @@ notificationRouter.get('/count', requireAuth, async (req, res) => {
 //     }
 // });
 
+// Mark all notifications as read for the authenticated provider
+notificationRouter.patch('/read-all', requireAuth, async (req, res) => {
+    try {
+        const result = await Appointment.updateMany(
+            { provider: req.user.id, notificationStatus: 'unread' },
+            { $set: { notificationStatus: 'read' } }
+        );
+        res.status(200).json({ success: true, updated: result.modifiedCount || result.nModified || 0 });
+    } catch (err) {
+        console.error('Error marking all notifications as read:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // Mark notification as read - protected route
 notificationRouter.patch('/:id', requireAuth, async(req, res) => {
     try {

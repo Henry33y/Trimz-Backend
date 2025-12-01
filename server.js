@@ -1,6 +1,7 @@
 import express from "express"
 import { createServer } from 'http'
 import { Server as SocketIOServer } from 'socket.io'
+import jwt from 'jsonwebtoken'
 import dotenv from "dotenv"
 import { connectDB } from "./config/db.js"
 import multer from "multer"
@@ -147,7 +148,7 @@ const startServer = async () => {
       try {
         const token = socket.handshake.auth?.token;
         if (!token) return next(new Error('No auth token'));
-        const decoded = require('jsonwebtoken').verify(token, process.env.JWT_SECRET);
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
         socket.data.userId = decoded.id;
         next();
       } catch (err) {
