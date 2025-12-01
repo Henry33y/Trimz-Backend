@@ -15,15 +15,29 @@ notificationRouter.get('/', requireAuth, async (req, res) => {
         const query = { provider: req.user.id };
         if (status !== 'all') query.notificationStatus = status;
 
-        const [items, total] = await Promise.all([
+        const [itemsRaw, total] = await Promise.all([
             Appointment.find(query)
                 .sort({ createdAt: -1 })
                 .skip((page - 1) * limit)
                 .limit(limit)
                 .populate('customer', 'name')
-                .populate('service', 'name'),
+                .populate('service', 'name')
+                .populate('providerServices', 'name'),
             Appointment.countDocuments(query)
         ]);
+
+        // Normalize payload for consistent frontend rendering
+        const items = itemsRaw.map(doc => ({
+            _id: doc._id,
+            customer: doc.customer,
+            service: doc.service,
+            providerServices: doc.providerServices,
+            date: doc.date,
+            startTime: doc.startTime,
+            duration: doc.duration,
+            notificationStatus: doc.notificationStatus,
+            createdAt: doc.createdAt
+        }));
 
         res.status(200).json({
             success: true,
