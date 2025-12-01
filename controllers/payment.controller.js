@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import fetch from 'node-fetch';
 // Ensure environment variables are loaded even if server entry loads dotenv too late
 dotenv.config();
 import Appointment from '../models/appointment.model.js';
@@ -27,7 +28,10 @@ export const initPaystackPayment = async (req, res) => {
     const { appointmentId } = req.body;
     if (!appointmentId) return res.status(400).json({ success: false, message: 'appointmentId is required' });
     const secret = getPaystackSecret();
-    if (!secret) return res.status(500).json({ success: false, message: 'PAYSTACK_SECRET_KEY is not configured' });
+    if (!secret) {
+      console.error('[Paystack][init] Missing PAYSTACK secret. Env keys tried: PAYSTACK_SECRET_KEY | PAYSTACK_SECRET | paystack_secret_key');
+      return res.status(500).json({ success: false, message: 'PAYSTACK_SECRET_KEY is not configured' });
+    }
 
     // Load appointment and ensure the requester is the customer
     const appt = await Appointment.findById(appointmentId).populate('customer', 'email name').lean();
@@ -49,7 +53,10 @@ export const initPaystackPayment = async (req, res) => {
       amount = Number(appt.totalPrice) || 0;
     }
 
-    if (!amount || amount <= 0) return res.status(400).json({ success: false, message: 'Invalid amount for appointment' });
+    if (!amount || amount <= 0) {
+      console.error('[Paystack][init] Invalid amount computed', { appointmentId, amount, providerServices: appt.providerServices, totalPrice: appt.totalPrice });
+      return res.status(400).json({ success: false, message: 'Invalid amount for appointment' });
+    }
 
     // Customer email
     let email = undefined;
@@ -64,6 +71,7 @@ export const initPaystackPayment = async (req, res) => {
     const reference = `trimz_${appointmentId}_${Date.now()}`;
     const callbackUrlBase = getFrontendBase().replace(/\/$/, '');
     const callback_url = `${callbackUrlBase}/payment/callback`;
+    console.log('[Paystack][init] Prepared payload meta', { appointmentId, amount, currency: PAYSTACK_CURRENCY, reference, callback_url, frontendBase: callbackUrlBase });
 
     const payload = {
       email,
@@ -73,7 +81,8 @@ export const initPaystackPayment = async (req, res) => {
       callback_url
     };
 
-    const resp = await fetch(`${PAYSTACK_BASE}/transaction/initialize`, {
+    const initUrl = `${PAYSTACK_BASE}/transaction/initialize`;
+    const resp = await fetch(initUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -84,6 +93,7 @@ export const initPaystackPayment = async (req, res) => {
 
     const json = await resp.json();
     if (!resp.ok || !json?.status) {
+      console.error('[Paystack][init] Initialize failed', { status: resp.status, statusText: resp.statusText, body: json });
       return res.status(502).json({ success: false, message: json?.message || 'Failed to initialize Paystack transaction' });
     }
 
@@ -92,7 +102,7 @@ export const initPaystackPayment = async (req, res) => {
 
     return res.status(200).json({ success: true, authorization_url: json.data.authorization_url, reference });
   } catch (err) {
-    console.error('Paystack init error:', err);
+    console.error('[Paystack][init] Unexpected error:', err);
     return res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -102,14 +112,19 @@ export const verifyPaystackPayment = async (req, res) => {
     const { reference } = req.body || {};
     if (!reference) return res.status(400).json({ success: false, message: 'reference is required' });
     const secret = getPaystackSecret();
-    if (!secret) return res.status(500).json({ success: false, message: 'PAYSTACK_SECRET_KEY is not configured' });
+    if (!secret) {
+      console.error('[Paystack][verify] Missing PAYSTACK secret. Env keys tried: PAYSTACK_SECRET_KEY | PAYSTACK_SECRET | paystack_secret_key');
+      return res.status(500).json({ success: false, message: 'PAYSTACK_SECRET_KEY is not configured' });
+    }
 
-    const resp = await fetch(`${PAYSTACK_BASE}/transaction/verify/${encodeURIComponent(reference)}`, {
+    const verifyUrl = `${PAYSTACK_BASE}/transaction/verify/${encodeURIComponent(reference)}`;
+    const resp = await fetch(verifyUrl, {
       headers: { 'Authorization': `Bearer ${secret}` }
     });
     const json = await resp.json();
 
     if (!resp.ok || !json?.status) {
+      console.error('[Paystack][verify] Verification failed', { status: resp.status, statusText: resp.statusText, body: json });
       return res.status(502).json({ success: false, message: json?.message || 'Verification failed' });
     }
 
@@ -128,7 +143,7 @@ export const verifyPaystackPayment = async (req, res) => {
 
     return res.status(200).json({ success: true, paid: successful, gateway: data?.gateway_response || data?.status, data });
   } catch (err) {
-    console.error('Paystack verify error:', err);
+    console.error('[Paystack][verify] Unexpected error:', err);
     return res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -146,6 +161,7 @@ export const paystackWebhook = async (req, res) => {
       .digest('hex');
 
     if (hmac !== signature) {
+      console.error('[Paystack][webhook] Invalid signature');
       return res.status(401).send('Invalid signature');
     }
 
@@ -165,7 +181,7 @@ export const paystackWebhook = async (req, res) => {
 
     return res.status(200).send('ok');
   } catch (err) {
-    console.error('Paystack webhook error:', err);
+    console.error('[Paystack][webhook] Unexpected error:', err);
     return res.status(500).send('error');
   }
 };
