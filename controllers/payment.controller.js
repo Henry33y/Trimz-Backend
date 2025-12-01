@@ -185,3 +185,20 @@ export const paystackWebhook = async (req, res) => {
     return res.status(500).send('error');
   }
 };
+
+// Diagnostic endpoint to verify Paystack env/config presence (no secrets leaked)
+export const paystackDiag = async (req, res) => {
+  try {
+    const secret = getPaystackSecret();
+    const hasSecret = Boolean(secret && secret.length > 10);
+    return res.status(200).json({
+      success: true,
+      hasSecret,
+      baseUrl: PAYSTACK_BASE,
+      currency: PAYSTACK_CURRENCY,
+      nodeEnv: process.env.NODE_ENV || 'unknown',
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { requireAuth } from '../middlewares/auth.middleware.js';
-import { initPaystackPayment, verifyPaystackPayment, paystackWebhook } from '../controllers/payment.controller.js';
+import { initPaystackPayment, verifyPaystackPayment, paystackWebhook, paystackDiag } from '../controllers/payment.controller.js';
 
 const paymentRouter = Router();
 
@@ -11,3 +11,6 @@ paymentRouter.post('/init', requireAuth, initPaystackPayment);
 paymentRouter.post('/verify', requireAuth, verifyPaystackPayment);
 
 export default paymentRouter;
+
+// Safe diagnostics (no secret leak)
+paymentRouter.get('/diag', (req, res) => paystackDiag(req, res));
