@@ -25,6 +25,8 @@ import ratingRouter from "./routes/rating.routes.js"
 import passport from "passport"
 import "./config/passport.config.js"
 import notificationRouter from "./routes/notification.routes.js"
+import paymentRouter from "./routes/payment.routes.js"
+import { paystackWebhook } from './controllers/payment.controller.js'
 
 dotenv.config()
 
@@ -58,7 +60,10 @@ app.use((req, res, next) => {
   next();
 });
 
-// Body parsing middleware
+// Paystack webhook must read raw body for signature verification
+app.post('/api/payments/webhook', express.raw({ type: '*/*' }), paystackWebhook);
+
+// Body parsing middleware (after raw webhook route)
 app.use(express.json({ limit: '10mb' })); // Limit JSON body size
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
@@ -77,6 +82,7 @@ app.use("/api", loginRouter);
 app.use("/api/users/gallery", galleryRouter);
 app.use("/api/rating", ratingRouter);
 app.use('/api/notifications', notificationRouter);
+app.use('/api/payments', paymentRouter);
 
 //cron job
 // Start background job

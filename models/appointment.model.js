@@ -17,6 +17,8 @@ const AppointmentSchema = new mongoose.Schema({
   totalPrice: { type: String },
   paymentStatus: { type: String, enum: ["pending", "paid"], default: "pending" },
   paymentMethod: { type: String, enum: ["cash", "card", "momo"] },
+  paymentReference: { type: String },
+  paymentPaidAt: { type: Date },
   rating: {
     score: {
       type: Number,
