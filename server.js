@@ -29,6 +29,7 @@ import paymentRouter from "./routes/payment.routes.js"
 import { paystackWebhook } from './controllers/payment.controller.js'
 
 dotenv.config()
+console.log('Paystack secret: ', process.env.PAYSTACK_SECRET_KEY)
 if (!process.env.PAYSTACK_SECRET_KEY && !process.env.PAYSTACK_SECRET && !process.env.paystack_secret_key) {
   console.warn('[Startup] Paystack secret env is missing. Set PAYSTACK_SECRET_KEY for payments to work.');
 }
