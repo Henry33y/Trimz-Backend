@@ -191,12 +191,18 @@ export const paystackDiag = async (req, res) => {
   try {
     const secret = getPaystackSecret();
     const hasSecret = Boolean(secret && secret.length > 10);
+    const flags = {
+      has_PAYSTACK_SECRET_KEY: Boolean(process.env.PAYSTACK_SECRET_KEY),
+      has_PAYSTACK_SECRET: Boolean(process.env.PAYSTACK_SECRET),
+      has_paystack_secret_key: Boolean(process.env.paystack_secret_key),
+    };
     return res.status(200).json({
       success: true,
       hasSecret,
       baseUrl: PAYSTACK_BASE,
       currency: PAYSTACK_CURRENCY,
       nodeEnv: process.env.NODE_ENV || 'unknown',
+      flags
     });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
