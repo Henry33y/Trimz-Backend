@@ -74,6 +74,24 @@ export const createAppointment = async (req, res) => {
         // Audit log
         await createAuditLog(req.user ? req.user.id : "system", newAppointment._id, "Appointment", "create", "Appointment created");
 
+        // Realtime notify provider (room is provider id)
+        try {
+            if (global._io) {
+                global._io.to(String(savedAppointment.provider)).emit('notification:new', {
+                    id: savedAppointment._id,
+                    type: 'appointment_created',
+                    provider: savedAppointment.provider,
+                    customer: savedAppointment.customer,
+                    date: savedAppointment.date,
+                    startTime: savedAppointment.startTime,
+                    service: savedAppointment.service,
+                    notificationStatus: savedAppointment.notificationStatus
+                });
+            }
+        } catch (emitErr) {
+            console.error('Socket emit error (appointment created):', emitErr.message);
+        }
+
         res.status(201).json({ success: true, message: "Appointment created successfully", data: savedAppointment });
 
     } catch (error) {
@@ -101,6 +119,23 @@ export const updateAppointment = async (req, res) => {
 
         await createAuditLog(req.user ? req.user.id : "system", id, "Appointment", "update", `Appointment updated with changes: ${JSON.stringify(updatedAppointment)}`);
 
+        // Emit update event for provider if appointment still exists
+        try {
+            if (updatedAppointment && global._io) {
+                global._io.to(String(updatedAppointment.provider)).emit('notification:update', {
+                    id: updatedAppointment._id,
+                    type: 'appointment_updated',
+                    provider: updatedAppointment.provider,
+                    customer: updatedAppointment.customer,
+                    date: updatedAppointment.date,
+                    startTime: updatedAppointment.startTime,
+                    status: updatedAppointment.status
+                });
+            }
+        } catch (emitErr) {
+            console.error('Socket emit error (appointment updated):', emitErr.message);
+        }
+
         res.status(200).json({success: true, message: "Appointment Updated successfully", data: updatedAppointment})
     } catch(error) {
         console.log(`Error occured while updating appointment with id ${id}: `, error.message);
@@ -124,6 +159,20 @@ export const deleteAppointment = async (req, res) => {
         }
 
         await createAuditLog(req.user ? req.user.id : "system", id, "Appointment", "delete", `Appointment deleted`);
+
+        // Notify provider of deletion/cancellation
+        try {
+            if (deletedAppointment && global._io) {
+                global._io.to(String(deletedAppointment.provider)).emit('notification:delete', {
+                    id: deletedAppointment._id,
+                    type: 'appointment_deleted',
+                    provider: deletedAppointment.provider,
+                    customer: deletedAppointment.customer
+                });
+            }
+        } catch (emitErr) {
+            console.error('Socket emit error (appointment deleted):', emitErr.message);
+        }
 
         res.status(200).json({success: true, message: "Appointment Deleted successfully"})
 
