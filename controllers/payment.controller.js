@@ -25,6 +25,7 @@ function toMinorUnits(amountNumber) {
 
 export const initPaystackPayment = async (req, res) => {
   try {
+    console.log('Secret Key: ', process.env.PAYSTACK_SECRET_KEY)
     const { appointmentId } = req.body;
     if (!appointmentId) return res.status(400).json({ success: false, message: 'appointmentId is required' });
     const secret = getPaystackSecret();
