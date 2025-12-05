@@ -3,6 +3,7 @@ import { createServer } from 'http'
 import { Server as SocketIOServer } from 'socket.io'
 import jwt from 'jsonwebtoken'
 import dotenv from "dotenv"
+import dns from 'dns'
 import { connectDB } from "./config/db.js"
 import multer from "multer"
 import bcrypt from "bcrypt"
@@ -29,6 +30,14 @@ import paymentRouter from "./routes/payment.routes.js"
 import { paystackWebhook } from './controllers/payment.controller.js'
 
 dotenv.config()
+// Explicitly configure reliable DNS servers so third-party API calls (Paystack, etc.)
+// do not depend on flaky local resolvers, which previously triggered ENOTFOUND errors.
+try {
+  dns.setServers(['1.1.1.1', '8.8.8.8']);
+  console.log('[Startup] DNS servers pinned to 1.1.1.1 / 8.8.8.8');
+} catch (err) {
+  console.warn('[Startup] Unable to set custom DNS servers:', err.message);
+}
 console.log('Paystack secret: ', process.env.PAYSTACK_SECRET_KEY)
 if (!process.env.PAYSTACK_SECRET_KEY && !process.env.PAYSTACK_SECRET && !process.env.paystack_secret_key) {
   console.warn('[Startup] Paystack secret env is missing. Set PAYSTACK_SECRET_KEY for payments to work.');
