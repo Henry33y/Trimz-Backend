@@ -12,7 +12,12 @@ const PAYSTACK_BASE = process.env.PAYSTACK_BASE_URL || 'https://api.paystack.co'
 // Support alternate env names and ensure we re-read on each access if needed.
 // Keep a getter to allow hot-reload scenarios where env might be injected later.
 function getPaystackSecret() {
-  return process.env.PAYSTACK_SECRET_KEY || process.env.PAYSTACK_SECRET || process.env.paystack_secret_key;
+  const key = process.env.PAYSTACK_SECRET_KEY;
+  if (key) return key;
+  if (process.env.PAYSTACK_SECRET) return process.env.PAYSTACK_SECRET;
+  if (process.env.paystack_secret_key) return process.env.paystack_secret_key;
+  console.log('Env keys available:', Object.keys(process.env).filter(k => k.toLowerCase().includes('paystack')));
+  return undefined;
 }
 const PAYSTACK_SECRET = getPaystackSecret();
 const PAYSTACK_CURRENCY = process.env.PAYSTACK_CURRENCY || 'GHS';
@@ -25,7 +30,7 @@ function toMinorUnits(amountNumber) {
 
 export const initPaystackPayment = async (req, res) => {
   try {
-    console.log('Secret Key: ', process.env.PAYSTACK_SECRET_KEY)
+    console.log('Secret Key at init payment: ', process.env.PAYSTACK_SECRET_KEY)
     const { appointmentId } = req.body;
     if (!appointmentId) return res.status(400).json({ success: false, message: 'appointmentId is required' });
     const secret = getPaystackSecret();
