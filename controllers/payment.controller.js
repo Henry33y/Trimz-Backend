@@ -202,6 +202,7 @@ export const paystackDiag = async (req, res) => {
       has_PAYSTACK_SECRET: Boolean(process.env.PAYSTACK_SECRET),
       has_paystack_secret_key: Boolean(process.env.paystack_secret_key),
     };
+    const envKeys = Object.keys(process.env || {}).filter((key) => key.toLowerCase().includes('paystack'));
     console.log('[Paystack][diag] env flags', {
       ...flags,
       sample: secret ? `${secret.slice(0, 6)}***` : null
@@ -212,7 +213,8 @@ export const paystackDiag = async (req, res) => {
       baseUrl: PAYSTACK_BASE,
       currency: PAYSTACK_CURRENCY,
       nodeEnv: process.env.NODE_ENV || 'unknown',
-      flags
+      flags,
+      envKeys
     });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
