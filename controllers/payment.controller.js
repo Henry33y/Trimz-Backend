@@ -209,7 +209,7 @@ export const paystackDiag = async (req, res) => {
     });
     return res.status(200).json({
       success: true,
-      paystackBaseUrl: PAYSTACK_BASE,
+      paystackBaseUrl: process.env.PAYSTACK_SECRET_KEY,
       hasSecret,
       baseUrl: PAYSTACK_BASE,
       currency: PAYSTACK_CURRENCY,
