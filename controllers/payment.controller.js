@@ -8,7 +8,7 @@ import User from '../models/user.model.js';
 import { getFrontendBase } from '../config/frontendUrl.js';
 import crypto from 'crypto';
 
-const PAYSTACK_BASE = process.env.PAYSTACK_BASE_URL || 'https://api.paystack.co';
+const PAYSTACK_BASE = process.env.PAYSTACK_BASE_URL;
 // Support alternate env names and ensure we re-read on each access if needed.
 // Keep a getter to allow hot-reload scenarios where env might be injected later.
 function getPaystackSecret() {
@@ -209,6 +209,7 @@ export const paystackDiag = async (req, res) => {
     });
     return res.status(200).json({
       success: true,
+      paystackBaseUrl: PAYSTACK_BASE,
       hasSecret,
       baseUrl: PAYSTACK_BASE,
       currency: PAYSTACK_CURRENCY,
