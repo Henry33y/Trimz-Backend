@@ -7,20 +7,18 @@ import ProviderService from '../models/providerService.model.js';
 import User from '../models/user.model.js';
 import { getFrontendBase } from '../config/frontendUrl.js';
 import crypto from 'crypto';
+import { resolvePaystackSecret } from '../config/paystack.config.js';
 
-const PAYSTACK_BASE = process.env.PAYSTACK_BASE_URL;
-// Support alternate env names and ensure we re-read on each access if needed.
-// Keep a getter to allow hot-reload scenarios where env might be injected later.
-function getPaystackSecret() {
-  const key = process.env.PAYSTACK_SECRET_KEY;
-  if (key) return key;
-  if (process.env.PAYSTACK_SECRET) return process.env.PAYSTACK_SECRET;
-  if (process.env.paystack_secret_key) return process.env.paystack_secret_key;
-  console.log('Env keys available:', Object.keys(process.env).filter(k => k.toLowerCase().includes('paystack')));
-  return undefined;
-}
-const PAYSTACK_SECRET = getPaystackSecret();
+const PAYSTACK_BASE = process.env.PAYSTACK_BASE_URL || 'https://api.paystack.co';
 const PAYSTACK_CURRENCY = process.env.PAYSTACK_CURRENCY || 'GHS';
+
+function getPaystackSecretInfo() {
+  const info = resolvePaystackSecret() || {};
+  if (!info.secret) {
+    return { secret: null, source: info.source || 'unresolved', envKeys: info.envKeys || [] };
+  }
+  return info;
+}
 
 function toMinorUnits(amountNumber) {
   // Paystack expects amounts in minor units:
@@ -33,11 +31,12 @@ export const initPaystackPayment = async (req, res) => {
     console.log('Secret Key at init payment: ', process.env.PAYSTACK_SECRET_KEY)
     const { appointmentId } = req.body;
     if (!appointmentId) return res.status(400).json({ success: false, message: 'appointmentId is required' });
-    const secret = getPaystackSecret();
+    const { secret, source, envKeys } = getPaystackSecretInfo();
     if (!secret) {
       console.error('[Paystack][init] Missing PAYSTACK secret. Env keys tried: PAYSTACK_SECRET_KEY | PAYSTACK_SECRET | paystack_secret_key');
       return res.status(500).json({ success: false, message: 'PAYSTACK_SECRET_KEY is not configured' });
     }
+    console.log('[Paystack][init] Using Paystack secret from', source, envKeys?.length ? `env keys detected: ${envKeys.join(', ')}` : 'no paystack env keys');
 
     // Load appointment and ensure the requester is the customer
     const appt = await Appointment.findById(appointmentId).populate('customer', 'email name').lean();
@@ -117,11 +116,12 @@ export const verifyPaystackPayment = async (req, res) => {
   try {
     const { reference } = req.body || {};
     if (!reference) return res.status(400).json({ success: false, message: 'reference is required' });
-    const secret = getPaystackSecret();
+    const { secret, source, envKeys } = getPaystackSecretInfo();
     if (!secret) {
       console.error('[Paystack][verify] Missing PAYSTACK secret. Env keys tried: PAYSTACK_SECRET_KEY | PAYSTACK_SECRET | paystack_secret_key');
       return res.status(500).json({ success: false, message: 'PAYSTACK_SECRET_KEY is not configured' });
     }
+    console.log('[Paystack][verify] Using Paystack secret from', source, envKeys?.length ? `env keys detected: ${envKeys.join(', ')}` : 'no paystack env keys');
 
     const verifyUrl = `${PAYSTACK_BASE}/transaction/verify/${encodeURIComponent(reference)}`;
     const resp = await fetch(verifyUrl, {
@@ -161,8 +161,8 @@ export const paystackWebhook = async (req, res) => {
     if (!signature) return res.status(400).send('Missing signature');
 
     // req.body is a raw buffer (configured in server.js before json middleware)
-    const hmac = crypto
-      .createHmac('sha512', getPaystackSecret())
+      const hmac = crypto
+        .createHmac('sha512', getPaystackSecret())
       .update(req.body)
       .digest('hex');
 
