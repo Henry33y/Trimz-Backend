@@ -1,3 +1,4 @@
+
 import express from "express"
 import { createServer } from 'http'
 import { Server as SocketIOServer } from 'socket.io'
@@ -44,7 +45,7 @@ if (!process.env.PAYSTACK_SECRET_KEY && !process.env.PAYSTACK_SECRET && !process
 }
 
 const app = express()
-const PORT = process.env.PORT || 5000
+const PORT = process.env.PORT || 5002
 let io; // will hold socket.io instance
 
 // CORS: allow both local and production frontends via helper
@@ -103,23 +104,23 @@ cron.schedule('* * * * *', updateExpiredAppointments); // Every minute
 cron.schedule("0 0 * * *", updateAverageRating);
 
 //function to hash passwords
-export const hashPassword = async(password) => {
-    try {
-        const saltRounds = 10; // Number of salt rounds (the higher, the more secure but slower)
-        const hashedPassword = await bcrypt.hash(password, saltRounds);
-        return hashedPassword;
-    } catch (error) {
-        throw new Error("Error hashing password: " + error.message);
-    }
+export const hashPassword = async (password) => {
+  try {
+    const saltRounds = 10; // Number of salt rounds (the higher, the more secure but slower)
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    return hashedPassword;
+  } catch (error) {
+    throw new Error("Error hashing password: " + error.message);
+  }
 };
 
 
 
 export const appointmentIsActive = (appointmentObject) => {
-    if (appointmentObject.status === "pending" || appointmentObject.status === "in-progress") {
-        return true
-    }
-    return false
+  if (appointmentObject.status === "pending" || appointmentObject.status === "in-progress") {
+    return true
+  }
+  return false
 }
 
 // Global error handling middleware
@@ -147,7 +148,7 @@ const startServer = async () => {
   try {
     await connectDB();
     console.log('MongoDB Connected Successfully');
-    
+
     const httpServer = createServer(app);
 
     // Initialize Socket.IO with CORS matching allowed origins
@@ -212,7 +213,7 @@ const startServer = async () => {
 
     process.on('SIGTERM', shutdown);
     process.on('SIGINT', shutdown);
-    
+
   } catch (error) {
     console.error('Failed to connect to MongoDB:', error);
     process.exit(1);
