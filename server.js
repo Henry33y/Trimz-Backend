@@ -98,7 +98,7 @@ app.use("/api/v1/appointments", appointmentRouter);
 app.use("/api/v1", loginRouter);
 app.use("/api/v1/users/gallery", galleryRouter);
 app.use("/api/v1/rating", ratingRouter);
-app.use('/api/notifications', notificationRouter);
+app.use('/api/v1/notifications', notificationRouter);
 app.use('/api/v1/payments', paymentRouter);
 
 //cron job
