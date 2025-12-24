@@ -10,6 +10,13 @@ const UserSchema = new mongoose.Schema(
       enum: ["customer", "provider", "admin", "superadmin"], // Added "superadmin"
       default: "customer",
     },
+    status: {
+      type: String,
+      enum: ["pending", "approved", "rejected"],
+      default: function () {
+        return this.role === "provider" ? "pending" : "approved";
+      }
+    },
     gender: { type: String },
     phone: { type: String },
     profilePicture: {

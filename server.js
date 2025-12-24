@@ -26,9 +26,11 @@ import { updateAverageRating } from "./controllers/rating.controller.js"
 import ratingRouter from "./routes/rating.routes.js"
 import passport from "passport"
 import "./config/passport.config.js"
-import notificationRouter from "./routes/notification.routes.js"
-import paymentRouter from "./routes/payment.routes.js"
-import { paystackWebhook } from './controllers/payment.controller.js'
+import notificationRouter from "./routes/notification.routes.js";
+import paymentRouter from "./routes/payment.routes.js";
+import providerApprovalRouter from "./routes/providerApproval.routes.js";
+import testEmailRouter from "./routes/testEmail.routes.js";
+import { paystackWebhook } from './controllers/payment.controller.js';
 
 dotenv.config()
 // Explicitly configure reliable DNS servers so third-party API calls (Paystack, etc.)
@@ -100,6 +102,8 @@ app.use("/api/v1/users/gallery", galleryRouter);
 app.use("/api/v1/rating", ratingRouter);
 app.use('/api/v1/notifications', notificationRouter);
 app.use('/api/v1/payments', paymentRouter);
+app.use('/api/v1/providers', providerApprovalRouter);
+app.use('/api/v1/test-email', testEmailRouter);
 
 //cron job
 // Start background job

@@ -2,6 +2,7 @@ import mongoose from 'mongoose'
 import User from "../models/user.model.js";
 import { hashPassword } from "../server.js";
 import { createAuditLog } from './audit.controller.js';
+import { sendApprovalEmail } from './providerApproval.controller.js';
 import fs from 'fs'
 import cloudinary from '../config/cloudinary.config.js';
 import upload from '../config/upload.config.js';
@@ -11,38 +12,39 @@ import { deleteFile } from '../config/functions.js';
 export const getAllUsers = async (req, res) => {
     try {
         const users = await User.find({})
-        res.status(200).json({success: true, data: users, message: "Users retrieved successfully"})
+        res.status(200).json({ success: true, data: users, message: "Users retrieved successfully" })
     } catch (error) {
         console.log("Error in fetching users: ", error.message);
-        return res.status(500).json({success: false, message: `Server Error: ${error.message}`})
+        return res.status(500).json({ success: false, message: `Server Error: ${error.message}` })
     }
 }
 
 export const getAllProviders = async (req, res) => {
     try {
-        const users = await User.find({ role: "provider" }).sort({ averageRating: -1 })
-        res.status(200).json({success: true, data: users, message: "Providers retrieved successfully"})
+        // Only return approved providers to customers
+        const users = await User.find({ role: "provider", status: "approved" }).sort({ averageRating: -1 })
+        res.status(200).json({ success: true, data: users, message: "Providers retrieved successfully" })
     } catch (error) {
         console.log("Error in fetching providers: ", error.message);
-        return res.status(500).json({success: false, message: `Server Error: ${error.message}`})
+        return res.status(500).json({ success: false, message: `Server Error: ${error.message}` })
     }
 }
 
 export const getAllCustomers = async (req, res) => {
     try {
         const users = await User.find({ role: "customer" })
-        res.status(200).json({success: true, data: users, message: "Users retrieved successfully"})
+        res.status(200).json({ success: true, data: users, message: "Users retrieved successfully" })
     } catch (error) {
         console.log("Error in fetching users: ", error.message);
-        return res.status(500).json({success: false, message: `Server Error: ${error.message}`})
+        return res.status(500).json({ success: false, message: `Server Error: ${error.message}` })
     }
 }
 
 export const getSingleUserById = async (req, res) => {
     const { id } = req.params
 
-    if(!mongoose.Types.ObjectId.isValid(id)){
-        return res.status(404).json({success:false, message: "Invalid User ID"})
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(404).json({ success: false, message: "Invalid User ID" })
     }
 
     try {
@@ -50,35 +52,35 @@ export const getSingleUserById = async (req, res) => {
         if (!user) {
             return res.status(404).json({ success: false, message: "User not found" });
         }
-        res.status(200).json({success: true, data: user, message: "User retrieved successfully"})
+        res.status(200).json({ success: true, data: user, message: "User retrieved successfully" })
     } catch (error) {
         console.log(`Error in fetching user with id ${id}: `, error.message);
-        return res.status(500).json({success: false, message: `Server Error: ${error.message}`})
+        return res.status(500).json({ success: false, message: `Server Error: ${error.message}` })
     }
 }
 
 export const createNewUser = async (req, res) => {
     try {
         let { name, email, password, role, phone, location, verified, status, profilePicture, gender, available } = req.body
-        
+
         // Handle potential stringified JSON from FormData
         // (Sometimes FormData sends everything as strings)
-        
+
         const existingUser = await User.findOne({ email })
 
-        if(existingUser){
-            return res.status(400).json({success: false, message: "User already exists"})
+        if (existingUser) {
+            return res.status(400).json({ success: false, message: "User already exists" })
         }
-        
+
         const hash = await hashPassword(password)
 
-        if(req.file){
+        if (req.file) {
             console.log("File uploaded:", req.file.path);
             const imagePath = req.file.path
-            
+
             // Upload image to Cloudinary with a specified folder
             const result = await cloudinary.uploader.upload(imagePath, {
-                folder: 'ecutz/profilePictures' 
+                folder: 'ecutz/profilePictures'
             });
 
             profilePicture = {
@@ -105,60 +107,71 @@ export const createNewUser = async (req, res) => {
         if (req.file) {
             await deleteFile(req.file.path)
         }
-        
+
+        // Send approval email to owner if user is a provider
+        if (role === "provider") {
+            try {
+                await sendApprovalEmail(newCreatedUser);
+                console.log("Approval email sent to owner for provider:", newCreatedUser.email);
+            } catch (emailError) {
+                console.error("Failed to send approval email:", emailError.message);
+                // Don't fail the registration if email fails, but log it
+            }
+        }
+
         // Determine the ID of the person performing the action (system or logged in admin)
         const auditorId = req.user ? req.user.id : (req.userId || "system");
-        
-        await createAuditLog(auditorId, newCreatedUser._id, "User", "create", "New User was created"); 
 
-        res.status(201).json({success: true, message: "User created successfully", data: newCreatedUser})
+        await createAuditLog(auditorId, newCreatedUser._id, "User", "create", "New User was created");
+
+        res.status(201).json({ success: true, message: "User created successfully", data: newCreatedUser })
     } catch (error) {
         console.log(`Error in creating user: `, error.message);
-        return res.status(500).json({success: false, message: `Server Error: ${error.message}`})
+        return res.status(500).json({ success: false, message: `Server Error: ${error.message}` })
     }
 }
 
 
-export const getUserProfile = async(req, res)=>{
+export const getUserProfile = async (req, res) => {
     // Standardize getting the ID from middleware
     const userId = req.userId || (req.user && req.user._id);
 
     try {
         const user = await User.findById(userId)
 
-        if (!user){
-            return res.status(404).json({success: false, message: 'User not found'})
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found' })
         }
 
-        const {password, ...rest} = user._doc
+        const { password, ...rest } = user._doc
 
         res.status(200).json({ success: true, message: 'Profile information retrieved successfully', data: { ...rest } });
-    } catch(err) {
+    } catch (err) {
         res.status(500)
-        .json({success: false, message:"Something went wrong, cannot get profile"})
+            .json({ success: false, message: "Something went wrong, cannot get profile" })
     }
 }
 
 
 export const updateUser = async (req, res) => {
     const { id } = req.params;
-    
+
     // DEBUG: Log to confirm the route is hitting this controller
     console.log(`Update Request received for User ID: ${id}`);
-    
+
     // Normalize the ID of the user performing the request
     const auditorId = req.userId || (req.user && req.user.id) || (req.user && req.user._id);
 
-    try{
+    try {
         let { name, email, password, gender, role, phone, location, verified, status, profilePicture, bio, about, workingHours, available, achievements, experience, specialization, timeSlots } = req.body;
-        
+
         // console.log("Request Body:", req.body); // Uncomment if needed for debugging
 
-        if(!mongoose.Types.ObjectId.isValid(id)){
+        if (!mongoose.Types.ObjectId.isValid(id)) {
             console.log("Invalid Mongoose ID provided");
-            return res.status(404).json({success:false, message: "Invalid User ID format"})
+            return res.status(404).json({ success: false, message: "Invalid User ID format" })
         }
-        
+
         // Check if user exists
         const user = await User.findById(id);
         if (!user) {
@@ -203,7 +216,7 @@ export const updateUser = async (req, res) => {
                     console.log("Error deleting old image from Cloudinary:", cErr.message);
                 }
             }
-            
+
             // Upload new profile picture to Cloudinary
             const result = await cloudinary.uploader.upload(req.file.path, {
                 folder: 'ecutz/profilePictures',
@@ -212,13 +225,13 @@ export const updateUser = async (req, res) => {
                 url: result.secure_url,
                 public_id: result.public_id,
             };
-            
+
             // Clean up local file
             await deleteFile(req.file.path)
         }
 
         let hash = user.password
-        if(password){
+        if (password) {
             hash = await hashPassword(password)
         }
 
@@ -250,7 +263,7 @@ export const updateUser = async (req, res) => {
         if (!newUpdatedUser) {
             return res.status(404).json({ success: false, message: "User update failed" });
         }
-        
+
         // Audit Logging - Check if auditorId exists to prevent crash
         if (auditorId) {
             // Avoid logging the entire object to keep logs clean/performant
@@ -259,11 +272,11 @@ export const updateUser = async (req, res) => {
             console.warn("Audit Log skipped: No auditor ID found (req.user or req.userId missing)");
         }
 
-        res.status(200).json({success: true, message: "User Updated successfully", data: newUpdatedUser})
+        res.status(200).json({ success: true, message: "User Updated successfully", data: newUpdatedUser })
 
-    } catch(error) {
+    } catch (error) {
         console.log(`Error in updating user with id ${id}: `, error.message);
-        return res.status(500).json({success: false, message: `Server Error: ${error.message}`})
+        return res.status(500).json({ success: false, message: `Server Error: ${error.message}` })
     }
 }
 
@@ -273,8 +286,8 @@ export const deleteUser = async (req, res) => {
 
     const auditorId = req.userId || (req.user && req.user.id) || (req.user && req.user._id);
 
-    if(!mongoose.Types.ObjectId.isValid(id)){
-        return res.status(404).json({success:false, message: "Invalid User ID"})
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(404).json({ success: false, message: "Invalid User ID" })
     }
 
     try {
@@ -294,12 +307,12 @@ export const deleteUser = async (req, res) => {
         }
 
         if (auditorId) {
-            await createAuditLog(auditorId, deletedUser._id, "User", "delete", "User Deleted"); 
+            await createAuditLog(auditorId, deletedUser._id, "User", "delete", "User Deleted");
         }
 
-        res.status(200).json({success: true, message: "User Deleted successfully"})
+        res.status(200).json({ success: true, message: "User Deleted successfully" })
     } catch (error) {
         console.log(`Error in deleting user with id ${id}: ${error.message}`)
-        return res.status(500).json({success: false, message: `Server Error: ${error.message}`})
+        return res.status(500).json({ success: false, message: `Server Error: ${error.message}` })
     }
 }

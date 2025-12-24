@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import ProviderService from "../models/providerService.model.js";
+import User from "../models/user.model.js";
 import { createAuditLog } from "./audit.controller.js";
 import Appointment from "../models/appointment.model.js";
 import cloudinary from "../config/cloudinary.config.js";
@@ -98,6 +99,24 @@ export const createNewProviderService = async (req, res) => {
     console.log("Parsed services:", services);
     console.log("Provider ID:", providerId);
     console.log("Files count:", files.length);
+
+    // Check if provider is approved
+    const provider = await User.findById(providerId);
+
+    if (!provider) {
+      return res.status(404).json({
+        success: false,
+        message: "Provider not found"
+      });
+    }
+
+    if (provider.status !== "approved") {
+      return res.status(403).json({
+        success: false,
+        message: "Your account is pending approval. You cannot upload services until approved by the owner.",
+        status: provider.status
+      });
+    }
 
     if (!Array.isArray(services)) {
       return res.status(400).json({
