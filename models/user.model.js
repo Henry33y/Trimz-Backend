@@ -12,11 +12,20 @@ const UserSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["pending", "approved", "rejected"],
+      enum: ["pending", "approved", "rejected", "active", "inactive"],
       default: function () {
-        return this.role === "provider" ? "pending" : "approved";
+        return this.role === "provider" ? "pending" : "active";
       }
     },
+    approvalHistory: [
+      {
+        status: { type: String, enum: ["pending", "approved", "rejected"] },
+        changedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        changedByEmail: { type: String },
+        reason: { type: String },
+        timestamp: { type: Date, default: Date.now }
+      }
+    ],
     gender: { type: String },
     phone: { type: String },
     profilePicture: {
@@ -106,11 +115,7 @@ const UserSchema = new mongoose.Schema(
     appointments: [
       { type: mongoose.Schema.Types.ObjectId, ref: "Appointment" },
     ], // Appointments for both customers and providers
-    status: {
-      type: String,
-      enum: ["active", "inactive"],
-      default: "active",
-    },
+
     // Admin and Superadmin-specific fields
     permissions: {
       type: [String], // Admins and superadmins can have permissions like ["manageUsers", "manageServices", etc.]

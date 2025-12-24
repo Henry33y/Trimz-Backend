@@ -97,7 +97,7 @@ export const createNewUser = async (req, res) => {
             gender,
             phone,
             location,
-            status: role === "provider" ? "inactive" : "active",
+            status: role === "provider" ? "pending" : "active",
             profilePicture: req.file ? profilePicture : null,
             available: available || false,
         })

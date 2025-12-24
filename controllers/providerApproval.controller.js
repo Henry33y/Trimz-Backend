@@ -5,7 +5,7 @@ import sendEmail from "../config/mail.config.js";
 // Generate approval token
 export const generateApprovalToken = (providerId) => {
     return jwt.sign(
-        { providerId },
+        { providerId: providerId.toString() }, // Convert to string
         process.env.APPROVAL_SECRET || process.env.JWT_SECRET,
         { expiresIn: "7d" } // 7 days to approve
     );
@@ -194,15 +194,37 @@ export const approveProvider = async (req, res) => {
       `);
         }
 
+        console.log("Approval attempt:");
+        console.log("- Provider ID:", id);
+        console.log("- Token received:", token.substring(0, 20) + "...");
+        console.log("- Using secret:", process.env.APPROVAL_SECRET ? "APPROVAL_SECRET" : "JWT_SECRET");
+
         // Verify token
-        const decoded = jwt.verify(token, process.env.APPROVAL_SECRET || process.env.JWT_SECRET);
+        let decoded;
+        try {
+            const secret = process.env.APPROVAL_SECRET || process.env.JWT_SECRET;
+            decoded = jwt.verify(token, secret);
+            console.log("- Token decoded successfully");
+            console.log("- Decoded provider ID:", decoded.providerId);
+        } catch (jwtError) {
+            console.error("JWT Verification Error:", jwtError.message);
+            console.error("Error type:", jwtError.name);
+
+            // Re-throw to be caught by outer catch block
+            throw jwtError;
+        }
 
         if (decoded.providerId !== id) {
+            console.error("Provider ID mismatch!");
+            console.error("- Token says:", decoded.providerId);
+            console.error("- URL says:", id);
+
             return res.status(401).send(`
         <html>
           <body style="font-family: Arial; text-align: center; padding: 50px;">
             <h1 style="color: #ef4444;">❌ Invalid Token</h1>
             <p>The approval token does not match the provider ID.</p>
+            <p style="font-size: 12px; color: #666;">Token contains: ${decoded.providerId}<br>URL contains: ${id}</p>
           </body>
         </html>
       `);
