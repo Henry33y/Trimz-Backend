@@ -9,6 +9,7 @@ import {
     getSingleUserById,
     updateUser
 } from '../controllers/user.controller.js';
+import { deleteUserAccount } from '../controllers/deleteAccount.controller.js';
 import upload from '../config/upload.config.js';
 import { requireAuth, restrict } from '../middlewares/auth.middleware.js';
 
@@ -40,6 +41,10 @@ userRouter.get("/", getAllUsers);
 // Create a new user
 // URL: /api/v1/users/
 userRouter.post("/", upload.single("profilePicture"), createNewUser);
+
+// Delete own account (authenticated users)
+// URL: /api/v1/users/account
+userRouter.delete("/account", requireAuth, deleteUserAccount);
 
 // =================================================================
 // 3. DYNAMIC ROUTES (Captures /:id)
