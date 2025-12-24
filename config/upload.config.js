@@ -38,6 +38,7 @@ const serviceDir = "uploads/service";
 
 createDirectory(profilePictureDir);
 createDirectory(galleryDir);
+createDirectory(serviceDir);
 
 
 // Set up Multer to temporarily store files locally

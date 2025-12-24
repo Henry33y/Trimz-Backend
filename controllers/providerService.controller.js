@@ -25,7 +25,7 @@ export const getAllProviderService = async (req, res) => {
 export const getAllProviderServicesByProviderId = async (req, res) => {
   const { providerId } = req.params;
 
-  
+
 
   //Check if id is a valid mongoose valid
   if (!mongoose.Types.ObjectId.isValid(providerId)) {
@@ -87,10 +87,17 @@ export const getSingleProviderService = async (req, res) => {
 
 export const createNewProviderService = async (req, res) => {
   try {
+    console.log("=== Create Provider Service Request ===");
+    console.log("Body:", req.body);
+    console.log("Files:", req.files);
+
     const services = JSON.parse(req.body.services);
     const providerId = req.body.provider;
     const files = req.files?.providerServiceImage || []; // Files array for providerServiceImage
-    console.log("Files: ", files);
+
+    console.log("Parsed services:", services);
+    console.log("Provider ID:", providerId);
+    console.log("Files count:", files.length);
 
     if (!Array.isArray(services)) {
       return res.status(400).json({
@@ -108,6 +115,24 @@ export const createNewProviderService = async (req, res) => {
         return res.status(400).json({
           success: false,
           message: "Name, price, and duration are required for each service",
+        });
+      }
+
+      // Validate and parse price
+      const parsedPrice = parseFloat(serviceData.price);
+      if (isNaN(parsedPrice) || parsedPrice <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Invalid price for service "${serviceData.name}". Price must be a positive number.`,
+        });
+      }
+
+      // Validate and parse duration (extract numbers, allow "45 mins" format)
+      let parsedDuration = parseInt(serviceData.duration);
+      if (isNaN(parsedDuration) || parsedDuration <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Invalid duration for service "${serviceData.name}". Duration must be a positive number (in minutes).`,
         });
       }
 
@@ -139,8 +164,8 @@ export const createNewProviderService = async (req, res) => {
       const newService = new ProviderService({
         name: serviceData.name,
         provider: providerId,
-        price: parseFloat(serviceData.price),
-        duration: parseInt(serviceData.duration),
+        price: parsedPrice,
+        duration: parsedDuration,
         availability: serviceData.availability,
         description: serviceData.description,
         image: imageData,
@@ -167,7 +192,9 @@ export const createNewProviderService = async (req, res) => {
       data: createdServices,
     });
   } catch (error) {
-    console.log("Error creating provider services: ", error.message);
+    console.error("=== Error creating provider services ===");
+    console.error("Error message:", error.message);
+    console.error("Error stack:", error.stack);
     res.status(500).json({
       success: false,
       message: "Error creating provider services",
@@ -216,7 +243,7 @@ export const updateProviderService = async (req, res) => {
         };
 
         await deleteFile(file.path);
-        
+
       } catch (error) {
         console.log('Cloudinary', error);
         return res.status(500).json({

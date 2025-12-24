@@ -82,21 +82,24 @@ app.use(express.json({ limit: '10mb' })); // Limit JSON body size
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
+// Serve uploaded files (make profile pictures, gallery images, etc. accessible)
+app.use('/uploads', express.static('uploads'));
+
 // Initialize authentication
 app.use(passport.initialize());
 
 // API Routes
-app.use("/api/users", userRouter);
-app.use("/api/services", serviceRouter);
-app.use("/api/reviews", reviewRouter);
-app.use("/api/provider-services", providerServiceRouter);
-app.use("/api/audit-logs", auditRouter);
-app.use("/api/appointments", appointmentRouter);
-app.use("/api", loginRouter);
-app.use("/api/users/gallery", galleryRouter);
-app.use("/api/rating", ratingRouter);
+app.use("/api/v1/users", userRouter);
+app.use("/api/v1/services", serviceRouter);
+app.use("/api/v1/reviews", reviewRouter);
+app.use("/api/v1/provider-services", providerServiceRouter);
+app.use("/api/v1/audit-logs", auditRouter);
+app.use("/api/v1/appointments", appointmentRouter);
+app.use("/api/v1", loginRouter);
+app.use("/api/v1/users/gallery", galleryRouter);
+app.use("/api/v1/rating", ratingRouter);
 app.use('/api/notifications', notificationRouter);
-app.use('/api/payments', paymentRouter);
+app.use('/api/v1/payments', paymentRouter);
 
 //cron job
 // Start background job

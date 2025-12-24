@@ -60,8 +60,10 @@ export const getSingleUserById = async (req, res) => {
 export const createNewUser = async (req, res) => {
     try {
         let { name, email, password, role, phone, location, verified, status, profilePicture, gender, available } = req.body
-        console.log(profilePicture);
-
+        
+        // Handle potential stringified JSON from FormData
+        // (Sometimes FormData sends everything as strings)
+        
         const existingUser = await User.findOne({ email })
 
         if(existingUser){
@@ -71,12 +73,12 @@ export const createNewUser = async (req, res) => {
         const hash = await hashPassword(password)
 
         if(req.file){
-            console.log(req.file.path);
+            console.log("File uploaded:", req.file.path);
             const imagePath = req.file.path
-            console.log(imagePath);
+            
             // Upload image to Cloudinary with a specified folder
             const result = await cloudinary.uploader.upload(imagePath, {
-            folder: 'ecutz/profilePictures'  // Specify your folder here
+                folder: 'ecutz/profilePictures' 
             });
 
             profilePicture = {
@@ -103,9 +105,11 @@ export const createNewUser = async (req, res) => {
         if (req.file) {
             await deleteFile(req.file.path)
         }
-        console.log(req.user);
-
-        await createAuditLog(req.user ? req.user.id : "system", newCreatedUser._id, "User", "create", "New User was created"); //Log user creation
+        
+        // Determine the ID of the person performing the action (system or logged in admin)
+        const auditorId = req.user ? req.user.id : (req.userId || "system");
+        
+        await createAuditLog(auditorId, newCreatedUser._id, "User", "create", "New User was created"); 
 
         res.status(201).json({success: true, message: "User created successfully", data: newCreatedUser})
     } catch (error) {
@@ -116,7 +120,8 @@ export const createNewUser = async (req, res) => {
 
 
 export const getUserProfile = async(req, res)=>{
-    const userId = req.userId
+    // Standardize getting the ID from middleware
+    const userId = req.userId || (req.user && req.user._id);
 
     try {
         const user = await User.findById(userId)
@@ -130,131 +135,143 @@ export const getUserProfile = async(req, res)=>{
         res.status(200).json({ success: true, message: 'Profile information retrieved successfully', data: { ...rest } });
     } catch(err) {
         res.status(500)
-        .json({success: false, message:"Something went wrong, cannot get"})
+        .json({success: false, message:"Something went wrong, cannot get profile"})
     }
 }
 
 
-
-
-    
-
-   
-
 export const updateUser = async (req, res) => {
-    const { id } = req.params
-    try{
-
-    let { name, email, password, gender, role, phone, location, verified, status, profilePicture, bio, about, workingHours, available, achievements, experience, specialization,timeSlots } = req.body
-    console.log(req.body)
-    if(!mongoose.Types.ObjectId.isValid(id)){
-        return res.status(404).json({success:false, message: "Invalid User ID"})
-    }
+    const { id } = req.params;
     
-    // Check if user exists
-    const user = await User.findById(id);
-    if (!user) {
-        return res.status(404).json({ success: false, message: "User not found" });
-    }
+    // DEBUG: Log to confirm the route is hitting this controller
+    console.log(`Update Request received for User ID: ${id}`);
+    
+    // Normalize the ID of the user performing the request
+    const auditorId = req.userId || (req.user && req.user.id) || (req.user && req.user._id);
 
-    // Check if email is being updated and if it's unique
-    if (email && email !== user.email) {
-        const existingUser = await User.findOne({ email });
-        if (existingUser) {
-            return res.status(400).json({ success: false, message: "Email already in use" });
-        }
-    }
+    try{
+        let { name, email, password, gender, role, phone, location, verified, status, profilePicture, bio, about, workingHours, available, achievements, experience, specialization, timeSlots } = req.body;
+        
+        // console.log("Request Body:", req.body); // Uncomment if needed for debugging
 
-    // Process achievements and workingHours if they are strings
-    if (typeof achievements === "string") {
-        try {
-          achievements = JSON.parse(achievements);
-        } catch (error) {
-          console.error("Error parsing achievements:", error.message);
-        }
-      }
-    if (typeof timeSlots === "string") {
-        try {
-          timeSlots = JSON.parse(timeSlots);
-        } catch (error) {
-          console.error("Error parsing timeSlots:", error.message);
-        }
-    }
-    if (typeof experience === "string") {
-        try {
-          experience = JSON.parse(experience);
-        } catch (error) {
-          console.error("Error parsing experience:", error.message);
-        }
-    }
-
-     // Update profile picture if provided and delete the old one
-     let updatedProfilePic = user.profilePicture
-     if (req.file) {
-        console.log(req.file);
-        // Delete old profile picture from cloudinary if it exists
-        if (user.profilePicture && user.profilePicture.public_id) {
-            await cloudinary.uploader.destroy(user.profilePicture.public_id);
+        if(!mongoose.Types.ObjectId.isValid(id)){
+            console.log("Invalid Mongoose ID provided");
+            return res.status(404).json({success:false, message: "Invalid User ID format"})
         }
         
-        // Update with new profile picture
-        // Upload new profile picture to Cloudinary
-        const result = await cloudinary.uploader.upload(req.file.path, {
-            folder: 'ecutz/profilePictures',
-        });
-        updatedProfilePic = {
-            url: result.secure_url,
-            public_id: result.public_id,
+        // Check if user exists
+        const user = await User.findById(id);
+        if (!user) {
+            console.log("User not found in DB");
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        // Check if email is being updated and if it's unique
+        if (email && email !== user.email) {
+            const existingUser = await User.findOne({ email });
+            if (existingUser) {
+                return res.status(400).json({ success: false, message: "Email already in use" });
+            }
+        }
+
+        // Helper function to safely parse JSON strings
+        const safeParse = (value) => {
+            if (typeof value === "string") {
+                try {
+                    return JSON.parse(value);
+                } catch (error) {
+                    console.error(`Error parsing JSON field: ${value}`, error.message);
+                    return value; // Return original string if parse fails, or handle differently
+                }
+            }
+            return value;
         };
-        await deleteFile(req.file.path)
-    }
 
-    let hash = user.password
-    if(password){
-        hash = await hashPassword(password)
-    }
+        achievements = safeParse(achievements);
+        timeSlots = safeParse(timeSlots);
+        experience = safeParse(experience);
 
-    const updatedUser = {
-        name: name || user.name,
-        email: email || user.email,
-        password: hash,
-        role: role || user.role,
-        gender: gender || user.gender,
-        phone: phone || user.phone,
-        location: location || user.location,
-        bio: bio || user.bio,
-        about: about || user.about,
-        status: status || user.status,
-        verified: verified || user.verified,
-        profilePicture: req.file ? updatedProfilePic : profilePicture,
-        available: available || user.available,
-        achievements: achievements || user.achievements,
-        experience: experience || user.experience,
-        specialization: specialization || user.specialization,
-        workingHours: timeSlots || user.workingHours,
-    }
+        // Update profile picture if provided and delete the old one
+        let updatedProfilePic = user.profilePicture
+        if (req.file) {
+            console.log("Processing new profile picture...");
+            // Delete old profile picture from cloudinary if it exists
+            if (user.profilePicture && user.profilePicture.public_id) {
+                try {
+                    await cloudinary.uploader.destroy(user.profilePicture.public_id);
+                } catch (cErr) {
+                    console.log("Error deleting old image from Cloudinary:", cErr.message);
+                }
+            }
+            
+            // Upload new profile picture to Cloudinary
+            const result = await cloudinary.uploader.upload(req.file.path, {
+                folder: 'ecutz/profilePictures',
+            });
+            updatedProfilePic = {
+                url: result.secure_url,
+                public_id: result.public_id,
+            };
+            
+            // Clean up local file
+            await deleteFile(req.file.path)
+        }
 
+        let hash = user.password
+        if(password){
+            hash = await hashPassword(password)
+        }
+
+        // Map timeSlots (from frontend) to workingHours (in DB) if provided
+        const finalWorkingHours = timeSlots || workingHours || user.workingHours;
+
+        const updatedUser = {
+            name: name || user.name,
+            email: email || user.email,
+            password: hash,
+            role: role || user.role,
+            gender: gender || user.gender,
+            phone: phone || user.phone,
+            location: location || user.location,
+            bio: bio || user.bio,
+            about: about || user.about,
+            status: status || user.status,
+            verified: verified || user.verified,
+            profilePicture: req.file ? updatedProfilePic : profilePicture, // Use existing if no file, or new one
+            available: available !== undefined ? available : user.available, // Handle boolean correctly
+            achievements: achievements || user.achievements,
+            experience: experience || user.experience,
+            specialization: specialization || user.specialization,
+            workingHours: finalWorkingHours,
+        }
 
         const newUpdatedUser = await User.findByIdAndUpdate(id, updatedUser, { new: true })
 
-        console.log(newUpdatedUser);
-
         if (!newUpdatedUser) {
-            return res.status(404).json({ success: false, message: "User not found" });
+            return res.status(404).json({ success: false, message: "User update failed" });
         }
-        console.log(`User ID: ${req.user.id}`, `Id: ${id}`);
-        await createAuditLog(req.user.id, id, "User", "update", `Updated user with changes: ${JSON.stringify(updatedUser)}`);
+        
+        // Audit Logging - Check if auditorId exists to prevent crash
+        if (auditorId) {
+            // Avoid logging the entire object to keep logs clean/performant
+            await createAuditLog(auditorId, id, "User", "update", `User profile updated`);
+        } else {
+            console.warn("Audit Log skipped: No auditor ID found (req.user or req.userId missing)");
+        }
 
-        res.status(200).json({success: true, message: "User Updated successfully", data: newUpdatedUser,})
+        res.status(200).json({success: true, message: "User Updated successfully", data: newUpdatedUser})
+
     } catch(error) {
-        console.log(`Error in fetching user with id ${id}: `, error.message);
+        console.log(`Error in updating user with id ${id}: `, error.message);
         return res.status(500).json({success: false, message: `Server Error: ${error.message}`})
     }
 }
 
 export const deleteUser = async (req, res) => {
     const { id } = req.params
-    console.log("id:",id);
+    console.log("Delete request for ID:", id);
+
+    const auditorId = req.userId || (req.user && req.user.id) || (req.user && req.user._id);
 
     if(!mongoose.Types.ObjectId.isValid(id)){
         return res.status(404).json({success:false, message: "Invalid User ID"})
@@ -269,10 +286,16 @@ export const deleteUser = async (req, res) => {
 
         // Delete profile picture if it exists
         if (deletedUser.profilePicture && deletedUser.profilePicture.public_id) {
-            await cloudinary.uploader.destroy(deletedUser.profilePicture.public_id);
+            try {
+                await cloudinary.uploader.destroy(deletedUser.profilePicture.public_id);
+            } catch (err) {
+                console.log("Failed to delete image from Cloudinary:", err.message);
+            }
         }
 
-        await createAuditLog(req.user.id, deletedUser._id, "User", "delete", "User Deleted"); //Log user deletion
+        if (auditorId) {
+            await createAuditLog(auditorId, deletedUser._id, "User", "delete", "User Deleted"); 
+        }
 
         res.status(200).json({success: true, message: "User Deleted successfully"})
     } catch (error) {
