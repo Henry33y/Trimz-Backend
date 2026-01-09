@@ -92,6 +92,7 @@ app.use('/uploads', express.static('uploads'));
 app.use(passport.initialize());
 
 // API Routes
+app.use('/api/v1/admin', adminRouter);
 app.use("/api/v1/users", userRouter);
 app.use("/api/v1/services", serviceRouter);
 app.use("/api/v1/reviews", reviewRouter);
@@ -105,7 +106,6 @@ app.use('/api/v1/notifications', notificationRouter);
 app.use('/api/v1/payments', paymentRouter);
 app.use('/api/v1/providers', providerApprovalRouter);
 app.use('/api/v1/test-email', testEmailRouter);
-app.use('/api/v1/admin', adminRouter);
 
 //cron job
 // Start background job
@@ -202,6 +202,23 @@ const startServer = async () => {
 
     const server = httpServer.listen(PORT, () => {
       console.log(`Server (HTTP+Socket.IO) running on port ${PORT}`);
+
+      // Log registered routes for debugging
+      console.log('--- Registered Routes ---');
+      app._router.stack.forEach((r) => {
+        if (r.route && r.route.path) {
+          console.log(`${Object.keys(r.route.methods).join(',').toUpperCase()} ${r.route.path}`);
+        } else if (r.name === 'router') {
+          // Inner routes
+          r.handle.stack.forEach((handler) => {
+            if (handler.route) {
+              console.log(`${Object.keys(handler.route.methods).join(',').toUpperCase()} ${r.regexp} ${handler.route.path}`);
+            }
+          });
+        }
+      });
+      console.log('-------------------------');
+
       if (process.env.NODE_ENV === 'production') {
         console.log('Production server started at:', process.env.BACKEND_URL);
         console.log('Allowed frontend origins:', allowedOrigins.join(', '));
