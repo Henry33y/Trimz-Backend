@@ -14,12 +14,14 @@ const adminRouter = Router();
 adminRouter.use(requireAuth);
 adminRouter.use(restrict(["admin", "superadmin"]));
 
-// Get all providers (including pending, approved, rejected)
-// Get all providers
-adminRouter.get("/providers", getAllProvidersAdmin);
+// Public health check for this router
+adminRouter.get("/health", (req, res) => res.json({ status: "admin-router-active" }));
 
 // Get system stats - SUPERADMIN ONLY
-adminRouter.get("/stats", restrict(["superadmin"]), getSystemStats);
+adminRouter.get("/platform-stats", restrict(["superadmin"]), getSystemStats);
+
+// Get all providers (including pending, approved, rejected)
+adminRouter.get("/providers", getAllProvidersAdmin);
 
 // Get pending providers
 adminRouter.get("/providers/pending", getAllProvidersAdmin); // Controller handles filtering via query if needed, or we explicitly create a pending handler
