@@ -3,7 +3,8 @@ import {
     getAllProvidersAdmin,
     approveProviderAdmin,
     rejectProviderAdmin,
-    createAdminUser
+    createAdminUser,
+    getSystemStats
 } from "../controllers/admin.controller.js";
 import { requireAuth, restrict } from "../middlewares/auth.middleware.js";
 
@@ -17,6 +18,9 @@ adminRouter.use(restrict(["admin", "superadmin"]));
 // Get all providers
 adminRouter.get("/providers", getAllProvidersAdmin);
 
+// Get system stats - SUPERADMIN ONLY
+adminRouter.get("/stats", restrict(["superadmin"]), getSystemStats);
+
 // Get pending providers
 adminRouter.get("/providers/pending", getAllProvidersAdmin); // Controller handles filtering via query if needed, or we explicitly create a pending handler
 
@@ -26,7 +30,7 @@ adminRouter.post("/providers/:id/approve", approveProviderAdmin);
 // Reject a provider
 adminRouter.post("/providers/:id/reject", rejectProviderAdmin);
 
-// Create new admin
-adminRouter.post("/create-admin", createAdminUser);
+// Create new admin - RESTRICT TO SUPERADMIN ONLY
+adminRouter.post("/create-admin", restrict(["superadmin"]), createAdminUser);
 
 export default adminRouter;

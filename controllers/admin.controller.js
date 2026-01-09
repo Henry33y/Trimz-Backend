@@ -1,6 +1,43 @@
 import User from "../models/user.model.js";
 import sendEmail from "../config/mail.config.js";
 import bcrypt from "bcrypt";
+import Appointment from "../models/appointment.model.js";
+
+// Get system-wide stats (SuperAdmin only)
+export const getSystemStats = async (req, res) => {
+    try {
+        const totalUsers = await User.countDocuments({ role: "user" });
+        const totalProviders = await User.countDocuments({ role: "provider" });
+        const totalAppointments = await Appointment.countDocuments();
+        const pendingApprovals = await User.countDocuments({ role: "provider", status: "pending" });
+        const totalAdmins = await User.countDocuments({ role: "admin" });
+
+        // Calculate some basic revenue if needed, for now just counts
+        // Get recent signups
+        const recentSignups = await User.find({ role: { $in: ["user", "provider"] } })
+            .select("name email role createdAt")
+            .sort({ createdAt: -1 })
+            .limit(5);
+
+        res.status(200).json({
+            success: true,
+            data: {
+                totalUsers,
+                totalProviders,
+                totalAppointments,
+                pendingApprovals,
+                totalAdmins,
+                recentSignups
+            }
+        });
+    } catch (error) {
+        console.error("Error fetching system stats:", error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch system stats"
+        });
+    }
+};
 
 // Get providers (admin only)
 export const getAllProvidersAdmin = async (req, res) => {
