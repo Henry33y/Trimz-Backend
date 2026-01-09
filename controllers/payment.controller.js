@@ -8,6 +8,7 @@ import User from '../models/user.model.js';
 import { getFrontendBase } from '../config/frontendUrl.js';
 import crypto from 'crypto';
 import { resolvePaystackSecret } from '../config/paystack.config.js';
+import Config from '../models/config.model.js';
 
 const PAYSTACK_BASE = process.env.PAYSTACK_BASE_URL || 'https://api.paystack.co';
 const PAYSTACK_CURRENCY = process.env.PAYSTACK_CURRENCY || 'GHS';
@@ -18,6 +19,10 @@ function getPaystackSecretInfo() {
     return { secret: null, source: info.source || 'unresolved', envKeys: info.envKeys || [] };
   }
   return info;
+}
+
+function getPaystackSecret() {
+  return getPaystackSecretInfo().secret;
 }
 
 function toMinorUnits(amountNumber) {
@@ -39,29 +44,42 @@ export const initPaystackPayment = async (req, res) => {
     console.log('[Paystack][init] Using Paystack secret from', source, envKeys?.length ? `env keys detected: ${envKeys.join(', ')}` : 'no paystack env keys');
 
     // Load appointment and ensure the requester is the customer
-    const appt = await Appointment.findById(appointmentId).populate('customer', 'email name').lean();
+    const appt = await Appointment.findById(appointmentId).populate('customer', 'email name').populate('provider').lean();
     if (!appt) return res.status(404).json({ success: false, message: 'Appointment not found' });
     if (!req.user || String(req.user.id) !== String(appt.customer)) {
-      // When populated as object, appt.customer may be object; handle both
       const customerId = typeof appt.customer === 'object' ? appt.customer._id : appt.customer;
       if (String(req.user?.id) !== String(customerId)) {
         return res.status(403).json({ success: false, message: 'Not allowed to pay for this appointment' });
       }
     }
 
-    // Compute amount from provider services or fallback to totalPrice
-    let amount = 0;
+    // 1. Get Commission Rates from Config
+    const customerFeeConfig = await Config.findOne({ key: 'customer_fee_percent' });
+    const providerFeeConfig = await Config.findOne({ key: 'provider_fee_percent' });
+
+    const customerRate = customerFeeConfig ? Number(customerFeeConfig.value) : 5; // Default 5%
+    const providerRate = providerFeeConfig ? Number(providerFeeConfig.value) : 5; // Default 5%
+
+    // 2. Compute amount from provider services or fallback to totalPrice
+    let serviceAmount = 0;
     if (Array.isArray(appt.providerServices) && appt.providerServices.length) {
       const services = await ProviderService.find({ _id: { $in: appt.providerServices } }, 'price');
-      amount = services.reduce((sum, s) => sum + (Number(s.price) || 0), 0);
+      serviceAmount = services.reduce((sum, s) => sum + (Number(s.price) || 0), 0);
     } else if (appt.totalPrice) {
-      amount = Number(appt.totalPrice) || 0;
+      serviceAmount = Number(appt.totalPrice) || 0;
     }
 
-    if (!amount || amount <= 0) {
-      console.error('[Paystack][init] Invalid amount computed', { appointmentId, amount, providerServices: appt.providerServices, totalPrice: appt.totalPrice });
+    if (!serviceAmount || serviceAmount <= 0) {
+      console.error('[Paystack][init] Invalid amount computed', { appointmentId, serviceAmount });
       return res.status(400).json({ success: false, message: 'Invalid amount for appointment' });
     }
+
+    // 3. Calculate the "Comfort Split"
+    const customerFee = serviceAmount * (customerRate / 100);
+    const providerCut = serviceAmount * (providerRate / 100);
+
+    const totalToPay = serviceAmount + customerFee; // What the customer sees at checkout
+    const platformTotal = customerFee + providerCut; // Total Trimz revenue
 
     // Customer email
     let email = undefined;
@@ -76,15 +94,30 @@ export const initPaystackPayment = async (req, res) => {
     const reference = `trimz_${appointmentId}_${Date.now()}`;
     const callbackUrlBase = getFrontendBase().replace(/\/$/, '');
     const callback_url = `${callbackUrlBase}/payment/callback`;
-    console.log('[Paystack][init] Prepared payload meta', { appointmentId, amount, currency: PAYSTACK_CURRENCY, reference, callback_url, frontendBase: callbackUrlBase });
 
+    // 4. Build Split Payload
+    const provider = appt.provider;
     const payload = {
       email,
-      amount: toMinorUnits(amount),
+      amount: toMinorUnits(totalToPay),
       currency: PAYSTACK_CURRENCY,
       reference,
-      callback_url
+      callback_url,
+      metadata: {
+        appointmentId,
+        service_price: serviceAmount,
+        customer_fee: customerFee,
+        provider_commission: providerCut,
+        total_platform_revenue: platformTotal
+      }
     };
+
+    if (provider && provider.paystackSubaccountCode) {
+      payload.subaccount = provider.paystackSubaccountCode;
+      // transaction_charge is the part Trimz keeps
+      payload.transaction_charge = toMinorUnits(platformTotal);
+      console.log(`[Paystack][Split] Total: ${totalToPay}. Trimz Cut: ${platformTotal}. Barber Gets: ${totalToPay - platformTotal}`);
+    }
 
     const initUrl = `${PAYSTACK_BASE}/transaction/initialize`;
     const resp = await fetch(initUrl, {
@@ -98,7 +131,7 @@ export const initPaystackPayment = async (req, res) => {
 
     const json = await resp.json();
     if (!resp.ok || !json?.status) {
-      console.error('[Paystack][init] Initialize failed', { status: resp.status, statusText: resp.statusText, body: json });
+      console.error('[Paystack][init] Initialize failed', { status: resp.status, body: json });
       return res.status(502).json({ success: false, message: json?.message || 'Failed to initialize Paystack transaction' });
     }
 
@@ -161,8 +194,8 @@ export const paystackWebhook = async (req, res) => {
     if (!signature) return res.status(400).send('Missing signature');
 
     // req.body is a raw buffer (configured in server.js before json middleware)
-      const hmac = crypto
-        .createHmac('sha512', getPaystackSecret())
+    const hmac = crypto
+      .createHmac('sha512', getPaystackSecret())
       .update(req.body)
       .digest('hex');
 
@@ -219,5 +252,105 @@ export const paystackDiag = async (req, res) => {
     });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// --- NEW PAYOUT SETTINGS FOR PROVIDERS ---
+
+export const updatePayoutSettings = async (req, res) => {
+  try {
+    const { bankCode, accountNumber, accountName } = req.body;
+    const userId = req.user.id;
+
+    if (!bankCode || !accountNumber) {
+      return res.status(400).json({ success: false, message: "Bank and Account Number are required" });
+    }
+
+    const { secret } = getPaystackSecretInfo();
+
+    // 1. Create/Update a Subaccount on Paystack for this barber
+    const response = await fetch(`${PAYSTACK_BASE}/subaccount`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${secret}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        business_name: accountName || req.user.name,
+        settlement_bank: bankCode,
+        account_number: accountNumber,
+        percentage_charge: 0
+      })
+    });
+
+    const json = await response.json();
+
+    if (!response.ok || !json.status) {
+      return res.status(400).json({ success: false, message: json.message || "Failed to create Paystack subaccount" });
+    }
+
+    // 2. Save the subaccount code to our database
+    const subaccountCode = json.data.subaccount_code;
+    await User.findByIdAndUpdate(userId, {
+      paystackSubaccountCode: subaccountCode,
+      paystackBankCode: bankCode,
+      paystackAccountNumber: accountNumber
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Payout settings updated successfully!",
+      subaccountCode
+    });
+
+  } catch (error) {
+    console.error("Payout update error:", error);
+    res.status(500).json({ success: false, message: "Server error updating payout settings" });
+  }
+};
+
+export const deletePayoutSettings = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId);
+
+    if (!user.paystackSubaccountCode) {
+      return res.status(400).json({ success: false, message: "No payout settings found" });
+    }
+
+    const { secret } = getPaystackSecretInfo();
+
+    // 1. Deactivate Subaccount on Paystack
+    try {
+      await fetch(`${PAYSTACK_BASE}/subaccount/${user.paystackSubaccountCode}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${secret}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ active: false })
+      });
+      console.log(`[Paystack] Deactivated subaccount ${user.paystackSubaccountCode}`);
+    } catch (err) {
+      console.warn(`[Paystack] Failed to deactivate subaccount ${user.paystackSubaccountCode} on Paystack, proceeding with local deletion.`);
+    }
+
+    // 2. Remove locally
+    await User.findByIdAndUpdate(userId, {
+      $unset: {
+        paystackSubaccountCode: "",
+        paystackBankCode: "",
+        paystackAccountNumber: ""
+      }
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Payout settings deleted and deactivated on Paystack."
+    });
+
+  } catch (error) {
+    console.error("Payout deletion error:", error);
+    res.status(500).json({ success: false, message: "Server error during payout deletion" });
   }
 };

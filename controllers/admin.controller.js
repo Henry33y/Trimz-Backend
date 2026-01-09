@@ -9,7 +9,7 @@ import Config from "../models/config.model.js";
 // Get system-wide stats (SuperAdmin only)
 export const getSystemStats = async (req, res) => {
     try {
-        const totalUsers = await User.countDocuments({ role: "user" });
+        const totalUsers = await User.countDocuments({ role: "customer" });
         const totalProviders = await User.countDocuments({ role: "provider" });
         const totalAppointments = await Appointment.countDocuments();
         const pendingApprovals = await User.countDocuments({ role: "provider", status: "pending" });
@@ -17,7 +17,7 @@ export const getSystemStats = async (req, res) => {
 
         // Calculate some basic revenue if needed, for now just counts
         // Get recent signups
-        const recentSignups = await User.find({ role: { $in: ["user", "provider"] } })
+        const recentSignups = await User.find({ role: { $in: ["customer", "provider"] } })
             .select("name email role createdAt")
             .sort({ createdAt: -1 })
             .limit(5);
@@ -318,7 +318,7 @@ export const getAllAdmins = async (req, res) => {
 // Get all general users/customers (superadmin only)
 export const getAllUsersAdmin = async (req, res) => {
     try {
-        const users = await User.find({ role: "user" }).select("-password").sort({ createdAt: -1 });
+        const users = await User.find({ role: "customer" }).select("-password").sort({ createdAt: -1 });
         res.status(200).json({ success: true, data: users });
     } catch (error) {
         res.status(500).json({ success: false, message: "Failed to fetch users" });
@@ -474,6 +474,7 @@ export const getAllAppointmentsAdmin = async (req, res) => {
         const appointments = await Appointment.find(query)
             .populate("customer", "name email")
             .populate("provider", "name email")
+            .populate("service", "title")
             .sort({ date: -1, startTime: -1 })
             .limit(200);
 
@@ -523,8 +524,16 @@ export const getPlatformConfig = async (req, res) => {
 
         // Add defaults if not set
         if (!configMap.commission_rate) configMap.commission_rate = 15;
+        if (!configMap.customer_fee_percent) configMap.customer_fee_percent = 5;
+        if (!configMap.provider_fee_percent) configMap.provider_fee_percent = 5;
         if (configMap.maintenance_mode === undefined) configMap.maintenance_mode = false;
         if (!configMap.service_categories) configMap.service_categories = ["barber", "hairdresser", "stylist", "other"];
+        if (!configMap.available_locations) configMap.available_locations = [
+            "UG - Commonwealth Hall", "UG - Sarbah Hall", "UG - Legon Hall",
+            "UG - Akuafo Hall", "UG - Volta Hall", "UG - Limann Hall",
+            "UG - Kwapong Hall", "UG - Bani", "UG - Evandy", "Legon",
+            "East Legon", "Madina", "Atomic"
+        ];
 
         res.status(200).json({ success: true, data: configMap });
     } catch (error) {

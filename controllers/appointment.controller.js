@@ -8,26 +8,26 @@ import ProviderService from '../models/providerService.model.js';
 export const getAllAppointments = async (req, res) => {
     try {
         const appointments = await Appointment.find({})
-        res.status(200).json({success: true, data: appointments, message: "Appointments retrieved successfully"})
+        res.status(200).json({ success: true, data: appointments, message: "Appointments retrieved successfully" })
     } catch (error) {
         console.log("Error occurred while fetching appointments: ", error.message);
-        return res.status(500).json({success: false, message: `Server Error: ${error.message}`})
+        return res.status(500).json({ success: false, message: `Server Error: ${error.message}` })
     }
 }
 
 export const getSingleAppointment = async (req, res) => {
     const { id } = req.params
 
-    if(!mongoose.Types.ObjectId.isValid(id)){
-        return res.status(404).json({success:false, message: "Appointment not found"})
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(404).json({ success: false, message: "Appointment not found" })
     }
 
     try {
         const appointment = await Appointment.findById(id)
-        res.status(200).json({success: true, data: appointment, message: "Appointment retrieved successfully"})
+        res.status(200).json({ success: true, data: appointment, message: "Appointment retrieved successfully" })
     } catch (error) {
         console.log(`Error occurred while fetching appointment with id ${id}: `, error.message);
-        return res.status(500).json({success: false, message: `Server Error: ${error.message}`})
+        return res.status(500).json({ success: false, message: `Server Error: ${error.message}` })
     }
 }
 
@@ -71,8 +71,22 @@ export const createAppointment = async (req, res) => {
         const newAppointment = new Appointment(request);
         const savedAppointment = await newAppointment.save();
 
-        // Audit log
-        await createAuditLog(req.user ? req.user.id : "system", newAppointment._id, "Appointment", "create", "Appointment created");
+        // Populate customer and provider for detailed audit log
+        await savedAppointment.populate('customer provider');
+
+        // Create detailed audit log
+        const customerName = savedAppointment.customer?.name || 'Unknown Customer';
+        const providerName = savedAppointment.provider?.name || 'Unknown Provider';
+        const appointmentDate = new Date(savedAppointment.date).toLocaleDateString();
+        const auditDetails = `Customer "${customerName}" booked appointment with "${providerName}" for ${appointmentDate}`;
+
+        await createAuditLog(
+            req.user ? req.user.id : "system",
+            newAppointment._id,
+            "Appointment",
+            "create",
+            auditDetails
+        );
 
         // Realtime notify provider (room is provider id)
         try {
@@ -106,25 +120,73 @@ export const updateAppointment = async (req, res) => {
 
     const request = req.body
 
-    if(!mongoose.Types.ObjectId.isValid(id)){
-        return res.status(404).json({success:false, message: "Appointment not found"})
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(404).json({ success: false, message: "Appointment not found" })
     }
-    
-    try{
-        const updatedAppointment = await Appointment.findByIdAndUpdate(id, request, { new: true })
 
-        if(!updatedAppointment){
+    try {
+        // Get the original appointment before update
+        const originalAppointment = await Appointment.findById(id).populate('customer provider');
+
+        if (!originalAppointment) {
             return res.status(404).json({ success: false, message: "Appointment not found" });
         }
 
-        await createAuditLog(req.user ? req.user.id : "system", id, "Appointment", "update", `Appointment updated with changes: ${JSON.stringify(updatedAppointment)}`);
+        const updatedAppointment = await Appointment.findByIdAndUpdate(id, request, { new: true })
+            .populate('customer provider');
+
+        if (!updatedAppointment) {
+            return res.status(404).json({ success: false, message: "Appointment not found" });
+        }
+
+        // Create detailed audit log based on what changed
+        let auditDetails = '';
+        const changes = [];
+
+        if (originalAppointment.status !== updatedAppointment.status) {
+            changes.push(`status: ${originalAppointment.status} → ${updatedAppointment.status}`);
+
+            // Special handling for cancellations
+            if (updatedAppointment.status === 'cancelled') {
+                const customerName = updatedAppointment.customer?.name || 'Unknown Customer';
+                const providerName = updatedAppointment.provider?.name || 'Unknown Provider';
+                const appointmentDate = new Date(updatedAppointment.date).toLocaleDateString();
+
+                auditDetails = `Customer "${customerName}" cancelled appointment with "${providerName}" scheduled for ${appointmentDate}`;
+            } else {
+                auditDetails = `Appointment status changed from ${originalAppointment.status} to ${updatedAppointment.status}`;
+            }
+        }
+
+        if (originalAppointment.date !== updatedAppointment.date) {
+            changes.push(`date: ${originalAppointment.date} → ${updatedAppointment.date}`);
+        }
+
+        if (originalAppointment.startTime !== updatedAppointment.startTime) {
+            changes.push(`time: ${originalAppointment.startTime} → ${updatedAppointment.startTime}`);
+        }
+
+        // If no specific detail was set, create a generic one
+        if (!auditDetails && changes.length > 0) {
+            auditDetails = `Appointment updated: ${changes.join(', ')}`;
+        } else if (!auditDetails) {
+            auditDetails = 'Appointment details updated';
+        }
+
+        await createAuditLog(
+            req.user ? req.user.id : "system",
+            id,
+            "Appointment",
+            updatedAppointment.status === 'cancelled' ? 'cancel' : 'update',
+            auditDetails
+        );
 
         // Emit update event for provider if appointment still exists
         try {
             if (updatedAppointment && global._io) {
                 global._io.to(String(updatedAppointment.provider)).emit('notification:update', {
                     id: updatedAppointment._id,
-                    type: 'appointment_updated',
+                    type: updatedAppointment.status === 'cancelled' ? 'appointment_cancelled' : 'appointment_updated',
                     provider: updatedAppointment.provider,
                     customer: updatedAppointment.customer,
                     date: updatedAppointment.date,
@@ -136,29 +198,42 @@ export const updateAppointment = async (req, res) => {
             console.error('Socket emit error (appointment updated):', emitErr.message);
         }
 
-        res.status(200).json({success: true, message: "Appointment Updated successfully", data: updatedAppointment})
-    } catch(error) {
+        res.status(200).json({ success: true, message: "Appointment Updated successfully", data: updatedAppointment })
+    } catch (error) {
         console.log(`Error occured while updating appointment with id ${id}: `, error.message);
-        return res.status(500).json({success: false, message: `Server Error: ${error.message}`})
+        return res.status(500).json({ success: false, message: `Server Error: ${error.message}` })
     }
 }
 
 export const deleteAppointment = async (req, res) => {
     const { id } = req.params
-    console.log("id:",id);
+    console.log("id:", id);
 
-    if(!mongoose.Types.ObjectId.isValid(id)){
-        return res.status(404).json({success:false, message: "Appointment not found"})
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(404).json({ success: false, message: "Appointment not found" })
     }
 
     try {
         const deletedAppointment = await Appointment.findByIdAndDelete(id)
+            .populate('customer provider');
 
         if (!deletedAppointment) {
             return res.status(404).json({ success: false, message: "Appointment not found" });
         }
 
-        await createAuditLog(req.user ? req.user.id : "system", id, "Appointment", "delete", `Appointment deleted`);
+        // Create detailed audit log
+        const customerName = deletedAppointment.customer?.name || 'Unknown Customer';
+        const providerName = deletedAppointment.provider?.name || 'Unknown Provider';
+        const appointmentDate = new Date(deletedAppointment.date).toLocaleDateString();
+        const auditDetails = `Appointment between "${customerName}" and "${providerName}" for ${appointmentDate} was deleted`;
+
+        await createAuditLog(
+            req.user ? req.user.id : "system",
+            id,
+            "Appointment",
+            "delete",
+            auditDetails
+        );
 
         // Notify provider of deletion/cancellation
         try {
@@ -174,24 +249,24 @@ export const deleteAppointment = async (req, res) => {
             console.error('Socket emit error (appointment deleted):', emitErr.message);
         }
 
-        res.status(200).json({success: true, message: "Appointment Deleted successfully"})
+        res.status(200).json({ success: true, message: "Appointment Deleted successfully" })
 
     } catch (error) {
         console.log(`Error in deleting appointment with id ${id}: ${error.message}`)
-        return res.status(500).json({success: false, message: `Server Error: ${error.message}`})
+        return res.status(500).json({ success: false, message: `Server Error: ${error.message}` })
     }
 }
 
-export const getUserAppointments = async(req,res) => {
+export const getUserAppointments = async (req, res) => {
     try {
         console.log('User: ', req.user);
         const appointments = await Appointment.find({ customer: req.user.id }).populate('provider').populate('providerServices').sort({ createdAt: -1 });
         console.log(appointments);
 
-        if(!appointments || appointments.length === 0){
-            return res.status(200).json({ 
-                success: true, 
-                message: "No appointments found" 
+        if (!appointments || appointments.length === 0) {
+            return res.status(200).json({
+                success: true,
+                message: "No appointments found"
             });
         }
 
@@ -202,30 +277,30 @@ export const getUserAppointments = async(req,res) => {
         });
     } catch (err) {
         res.status(500).json({
-            success: false, 
+            success: false,
             message: "Something went wrong, cannot get user appointments"
         });
     }
 }
 export const getProviderAppointments = async (req, res) => {
-  try {
-    const appointments = await Appointment.find({ provider: req.user.id })
-      .populate('customer')
-      .populate('providerServices');
+    try {
+        const appointments = await Appointment.find({ provider: req.user.id })
+            .populate('customer')
+            .populate('providerServices');
 
-    console.log('Provider Appointments:', appointments);
+        console.log('Provider Appointments:', appointments);
 
-    // Always return 200, even if the array is empty
-    res.status(200).json({
-      success: true,
-      message: appointments.length > 0 ? "Appointments fetched successfully" : "No appointments found",
-      data: appointments // will be [] if none exist
-    });
-  } catch (err) {
-    console.error('Error fetching provider appointments:', err.message);
-    res.status(500).json({
-      success: false,
-      message: "Something went wrong, cannot get provider appointments"
-    });
-  }
+        // Always return 200, even if the array is empty
+        res.status(200).json({
+            success: true,
+            message: appointments.length > 0 ? "Appointments fetched successfully" : "No appointments found",
+            data: appointments // will be [] if none exist
+        });
+    } catch (err) {
+        console.error('Error fetching provider appointments:', err.message);
+        res.status(500).json({
+            success: false,
+            message: "Something went wrong, cannot get provider appointments"
+        });
+    }
 };

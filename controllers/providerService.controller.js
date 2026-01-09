@@ -187,6 +187,7 @@ export const createNewProviderService = async (req, res) => {
         duration: parsedDuration,
         availability: serviceData.availability,
         description: serviceData.description,
+        category: serviceData.category,
         image: imageData,
       });
 
@@ -276,7 +277,7 @@ export const updateProviderService = async (req, res) => {
     // Update the service with the new data and image details
     const updatedProviderService = await ProviderService.findByIdAndUpdate(
       id,
-      { ...updatedData, image: imageData },
+      { ...updatedData, image: imageData, category: updatedData.category || existingService.category },
       { new: true }
     );
 

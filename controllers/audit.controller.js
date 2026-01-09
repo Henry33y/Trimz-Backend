@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import AuditLog from "../models/audit.model.js";
+import User from "../models/user.model.js";
 
 //function or middleware to create an audit log 
 export const createAuditLog = async (userId, targetId, targetModel, action, details) => {
@@ -10,15 +11,29 @@ export const createAuditLog = async (userId, targetId, targetModel, action, deta
 
     try {
         console.log(userId, targetId);
+
+        // Fetch the user data to get name, email, and role
+        const user = await User.findById(userId).select('name email role');
+
+        if (!user) {
+            console.error("User not found for audit log creation");
+            return;
+        }
+
         const logEntry = new AuditLog({
-        user: userId,
-        target: targetId,
-        targetModel: targetModel,
-        action: action,
-        details: details,
+            user: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                role: user.role
+            },
+            target: targetId,
+            targetModel: targetModel,
+            action: action,
+            details: details,
         });
         await logEntry.save();
-        console.error("Audit log created successfully");
+        console.log("Audit log created successfully");
     } catch (error) {
         console.error("Failed to create audit log:", error);
     }
@@ -32,10 +47,11 @@ export const getAllAuditLogs = async (req, res) => {
         //     .sort({ timestamp: -1 })
         //     .skip(skip)
         //     .limit(Number(limit));
-        
-        const auditLogs = await AuditLog.find({}).sort({ timestamp: -1})
-        res.status(200).json({success: true, message: "Audit logs fetched successfully", data: auditLogs})
+
+        const auditLogs = await AuditLog.find({}).sort({ timestamp: -1 })
+        res.status(200).json({ success: true, message: "Audit logs fetched successfully", data: auditLogs })
     } catch (error) {
         console.error("Failed to get audit logs:", error);
-        return res.status(500).json({ success: false, message: "Failed to fetch Audit Logs", error: error.message })    }
+        return res.status(500).json({ success: false, message: "Failed to fetch Audit Logs", error: error.message })
+    }
 }

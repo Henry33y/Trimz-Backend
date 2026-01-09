@@ -13,6 +13,7 @@ const ProviderServiceSchema = new mongoose.Schema({
         public_id: { type: String }
     },
     description: { type: String },
+    category: { type: String }, // Category the service belongs to (from global config)
 }, { timestamps: true });
 
 const ProviderService = mongoose.model("ProviderService", ProviderServiceSchema);

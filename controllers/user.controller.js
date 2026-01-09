@@ -22,7 +22,9 @@ export const getAllUsers = async (req, res) => {
 export const getAllProviders = async (req, res) => {
     try {
         // Only return approved providers to customers
-        const users = await User.find({ role: "provider", status: "approved" }).sort({ averageRating: -1 })
+        const users = await User.find({ role: "provider", status: "approved" })
+            .populate('services')
+            .sort({ averageRating: -1 })
         res.status(200).json({ success: true, data: users, message: "Providers retrieved successfully" })
     } catch (error) {
         console.log("Error in fetching providers: ", error.message);
@@ -203,6 +205,7 @@ export const updateUser = async (req, res) => {
         achievements = safeParse(achievements);
         timeSlots = safeParse(timeSlots);
         experience = safeParse(experience);
+        specialization = safeParse(specialization);
 
         // Update profile picture if provided and delete the old one
         let updatedProfilePic = user.profilePicture

@@ -110,6 +110,9 @@ const UserSchema = new mongoose.Schema(
         },
       },
     ],
+    paystackSubaccountCode: { type: String }, // For Paystack Split Payments
+    paystackBankCode: { type: String }, // e.g., "058" for GTBank, "MTN" for Momo
+    paystackAccountNumber: { type: String }, // Bank account or Momo number
     available: { type: Boolean, default: false }, // New field to store availability status
     // For both customers and providers
     appointments: [
@@ -127,8 +130,18 @@ const UserSchema = new mongoose.Schema(
       type: Date,
     },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
+  }
 ); // Automatically adds `createdAt` and `updatedAt` timestamps
+
+UserSchema.virtual('services', {
+  ref: 'ProviderService',
+  localField: '_id',
+  foreignField: 'provider'
+});
 
 const User = mongoose.model("User", UserSchema);
 export default User;
