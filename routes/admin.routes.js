@@ -4,7 +4,11 @@ import {
     approveProviderAdmin,
     rejectProviderAdmin,
     createAdminUser,
-    getSystemStats
+    getSystemStats,
+    getAllAdmins,
+    getAllUsersAdmin,
+    updateUserAdmin,
+    deleteUserAdmin
 } from "../controllers/admin.controller.js";
 import { requireAuth, restrict } from "../middlewares/auth.middleware.js";
 
@@ -34,5 +38,15 @@ adminRouter.post("/providers/:id/reject", rejectProviderAdmin);
 
 // Create new admin - RESTRICT TO SUPERADMIN ONLY
 adminRouter.post("/create-admin", restrict(["superadmin"]), createAdminUser);
+
+// Manage Admins list
+adminRouter.get("/admins", restrict(["superadmin"]), getAllAdmins);
+
+// Manage General Users list
+adminRouter.get("/users", restrict(["superadmin"]), getAllUsersAdmin);
+
+// Generic User CRUD (for SuperAdmin to manage anyone)
+adminRouter.put("/users/:id", restrict(["superadmin"]), updateUserAdmin);
+adminRouter.delete("/users/:id", restrict(["superadmin"]), deleteUserAdmin);
 
 export default adminRouter;

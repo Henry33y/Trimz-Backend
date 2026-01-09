@@ -274,3 +274,82 @@ export const createAdminUser = async (req, res) => {
         });
     }
 };
+
+// Get all admins (superadmin only)
+export const getAllAdmins = async (req, res) => {
+    try {
+        const admins = await User.find({ role: "admin" }).select("-password").sort({ createdAt: -1 });
+        res.status(200).json({ success: true, data: admins });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Failed to fetch admins" });
+    }
+};
+
+// Get all general users/customers (superadmin only)
+export const getAllUsersAdmin = async (req, res) => {
+    try {
+        const users = await User.find({ role: "user" }).select("-password").sort({ createdAt: -1 });
+        res.status(200).json({ success: true, data: users });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Failed to fetch users" });
+    }
+};
+
+// Update any user details (superadmin only)
+export const updateUserAdmin = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, email, role, status, verified } = req.body;
+
+        const user = await User.findById(id);
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        // Prevent modifying other superadmins unless we decide otherwise
+        if (user.role === 'superadmin' && req.user.role !== 'superadmin') {
+            return res.status(403).json({ success: false, message: "Cannot modify superadmin" });
+        }
+
+        if (name) user.name = name;
+        if (email) user.email = email;
+        if (role) user.role = role;
+        if (status) user.status = status;
+        if (verified !== undefined) user.verified = verified;
+
+        await user.save();
+
+        res.status(200).json({
+            success: true,
+            message: "User updated successfully",
+            data: user
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Failed to update user" });
+    }
+};
+
+// Delete user (superadmin only)
+export const deleteUserAdmin = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const user = await User.findById(id);
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        if (user.role === 'superadmin') {
+            return res.status(403).json({ success: false, message: "Cannot delete superadmin accounts" });
+        }
+
+        await User.findByIdAndDelete(id);
+
+        res.status(200).json({
+            success: true,
+            message: "User account deleted successfully"
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Failed to delete user" });
+    }
+};
