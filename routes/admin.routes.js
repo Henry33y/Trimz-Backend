@@ -6,11 +6,12 @@ import {
     createAdminUser,
     getSystemStats,
     getAllAdmins,
-    getAllUsersAdmin,
-    updateUserAdmin,
-    deleteUserAdmin,
     getFinancialData,
-    getAuditLogs
+    getAuditLogs,
+    getAllAppointmentsAdmin,
+    updateAppointmentStatusAdmin,
+    getPlatformConfig,
+    updatePlatformConfig
 } from "../controllers/admin.controller.js";
 import { requireAuth, restrict } from "../middlewares/auth.middleware.js";
 
@@ -31,6 +32,14 @@ adminRouter.get("/financials", restrict(["superadmin"]), getFinancialData);
 
 // Get audit logs - SUPERADMIN ONLY
 adminRouter.get("/audit-logs", restrict(["superadmin"]), getAuditLogs);
+
+// Global Appointments - SUPERADMIN ONLY
+adminRouter.get("/appointments", restrict(["superadmin"]), getAllAppointmentsAdmin);
+adminRouter.put("/appointments/:id/status", restrict(["superadmin"]), updateAppointmentStatusAdmin);
+
+// Platform Configuration - SUPERADMIN ONLY
+adminRouter.get("/config", restrict(["superadmin"]), getPlatformConfig);
+adminRouter.put("/config", restrict(["superadmin"]), updatePlatformConfig);
 
 // Get all providers (including pending, approved, rejected)
 adminRouter.get("/providers", getAllProvidersAdmin);

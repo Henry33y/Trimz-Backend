@@ -4,6 +4,7 @@ import bcrypt from "bcrypt";
 import Appointment from "../models/appointment.model.js";
 import { logActivity } from "../utils/auditLogger.js";
 import AuditLog from "../models/audit.model.js";
+import Config from "../models/config.model.js";
 
 // Get system-wide stats (SuperAdmin only)
 export const getSystemStats = async (req, res) => {
@@ -456,5 +457,105 @@ export const getAuditLogs = async (req, res) => {
         });
     } catch (error) {
         res.status(500).json({ success: false, message: "Failed to fetch system logs" });
+    }
+};
+
+// --- NEW GOD-VIEW APPOINTMENTS ---
+
+export const getAllAppointmentsAdmin = async (req, res) => {
+    try {
+        const { status } = req.query;
+        let query = {};
+
+        if (status && status !== 'all') {
+            query.status = status;
+        }
+
+        const appointments = await Appointment.find(query)
+            .populate("customer", "name email")
+            .populate("provider", "name email")
+            .sort({ date: -1, startTime: -1 })
+            .limit(200);
+
+        res.status(200).json({ success: true, data: appointments });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Failed to fetch global appointments" });
+    }
+};
+
+export const updateAppointmentStatusAdmin = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status } = req.body;
+
+        const appointment = await Appointment.findById(id).populate("customer", "name");
+        if (!appointment) return res.status(404).json({ success: false, message: "Appointment not found" });
+
+        const oldStatus = appointment.status;
+        appointment.status = status;
+        await appointment.save();
+
+        // LOG ACTION
+        await logActivity({
+            action: "force_update_appointment",
+            user: req.user,
+            target: appointment._id,
+            targetModel: "Appointment",
+            details: `Force updated appointment status from ${oldStatus} to ${status} (Customer: ${appointment.customer?.name})`
+        });
+
+        res.status(200).json({ success: true, message: `Appointment status updated to ${status}` });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Failed to update appointment" });
+    }
+};
+
+// --- NEW PLATFORM CONFIG ---
+
+export const getPlatformConfig = async (req, res) => {
+    try {
+        const configs = await Config.find({});
+        // Map to object for easier frontend use
+        const configMap = {};
+        configs.forEach(c => {
+            configMap[c.key] = c.value;
+        });
+
+        // Add defaults if not set
+        if (!configMap.commission_rate) configMap.commission_rate = 15;
+        if (configMap.maintenance_mode === undefined) configMap.maintenance_mode = false;
+        if (!configMap.service_categories) configMap.service_categories = ["barber", "hairdresser", "stylist", "other"];
+
+        res.status(200).json({ success: true, data: configMap });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Failed to fetch platform config" });
+    }
+};
+
+export const updatePlatformConfig = async (req, res) => {
+    try {
+        const { settings } = req.body; // Expecting an object of { key: value }
+
+        for (const [key, value] of Object.entries(settings)) {
+            await Config.findOneAndUpdate(
+                { key },
+                { key, value },
+                { upsert: true, new: true }
+            );
+        }
+
+        // LOG ACTION
+        await logActivity({
+            action: "update_platform_config",
+            user: req.user,
+            target: req.user._id,
+            targetModel: "User",
+            details: `Updated platform global settings: ${Object.keys(settings).join(', ')}`
+        });
+
+        res.status(200).json({ success: true, message: "Platform configuration updated successfully" });
+    } catch (error) {
+        console.error("Config update error:", error);
+        res.status(500).json({ success: false, message: "Failed to update platform config" });
     }
 };
