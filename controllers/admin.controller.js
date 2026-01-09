@@ -2,6 +2,8 @@ import User from "../models/user.model.js";
 import sendEmail from "../config/mail.config.js";
 import bcrypt from "bcrypt";
 import Appointment from "../models/appointment.model.js";
+import { logActivity } from "../utils/auditLogger.js";
+import AuditLog from "../models/audit.model.js";
 
 // Get system-wide stats (SuperAdmin only)
 export const getSystemStats = async (req, res) => {
@@ -143,6 +145,15 @@ export const approveProviderAdmin = async (req, res) => {
             message: `${provider.name} approved successfully!`,
             data: provider
         });
+
+        // LOG ACTION
+        await logActivity({
+            action: "approve_provider",
+            user: req.user,
+            target: provider._id,
+            targetModel: "User",
+            details: `Approved provider application for ${provider.name}`
+        });
     } catch (error) {
         console.error("Error approving provider:", error);
         res.status(500).json({
@@ -211,6 +222,15 @@ export const rejectProviderAdmin = async (req, res) => {
             message: `${provider.name}'s application rejected`,
             data: provider
         });
+
+        // LOG ACTION
+        await logActivity({
+            action: "reject_provider",
+            user: req.user,
+            target: provider._id,
+            targetModel: "User",
+            details: `Rejected provider application for ${provider.name}. Reason: ${req.body.reason || 'No reason specified'}`
+        });
     } catch (error) {
         console.error("Error rejecting provider:", error);
         res.status(500).json({
@@ -265,6 +285,15 @@ export const createAdminUser = async (req, res) => {
                 email: newAdmin.email,
                 role: newAdmin.role
             }
+        });
+
+        // LOG ACTION
+        await logActivity({
+            action: "create_admin",
+            user: req.user,
+            target: newAdmin._id,
+            targetModel: "User",
+            details: `Forged new admin profile for ${newAdmin.name}`
         });
     } catch (error) {
         console.error("Error creating admin:", error);
@@ -324,6 +353,15 @@ export const updateUserAdmin = async (req, res) => {
             message: "User updated successfully",
             data: user
         });
+
+        // LOG ACTION
+        await logActivity({
+            action: "update_user",
+            user: req.user,
+            target: user._id,
+            targetModel: "User",
+            details: `Modified profile for ${user.name} (${user.role})`
+        });
     } catch (error) {
         res.status(500).json({ success: false, message: "Failed to update user" });
     }
@@ -349,7 +387,74 @@ export const deleteUserAdmin = async (req, res) => {
             success: true,
             message: "User account deleted successfully"
         });
+
+        // LOG ACTION
+        await logActivity({
+            action: "delete_user",
+            user: req.user,
+            target: user._id,
+            targetModel: "User",
+            details: `Permanently deleted user: ${user.name} (${user.email})`
+        });
     } catch (error) {
         res.status(500).json({ success: false, message: "Failed to delete user" });
+    }
+};
+
+// --- NEW FINANCIALS CONTROL ---
+
+export const getFinancialData = async (req, res) => {
+    try {
+        // 1. Transaction History (Paid Appointments)
+        const transactions = await Appointment.find({ paymentStatus: "paid" })
+            .populate("customer", "name email")
+            .populate("provider", "name email")
+            .sort({ updatedAt: -1 })
+            .limit(50);
+
+        // 2. Gross Volume (Sum of all paid appointments)
+        const allPaid = await Appointment.find({ paymentStatus: "paid" });
+        const grossVolume = allPaid.reduce((sum, app) => sum + parseFloat(app.totalPrice || 0), 0);
+
+        // 3. Projected Earnings (Sum of pending/in-progress for current month)
+        const startOfMonth = new Date();
+        startOfMonth.setDate(1);
+        startOfMonth.setHours(0, 0, 0, 0);
+
+        const pendingApps = await Appointment.find({
+            paymentStatus: "pending",
+            status: { $in: ["pending", "in-progress"] },
+            date: { $gte: startOfMonth }
+        });
+        const projectedEarnings = pendingApps.reduce((sum, app) => sum + parseFloat(app.totalPrice || 0), 0);
+
+        res.status(200).json({
+            success: true,
+            data: {
+                grossVolume,
+                projectedEarnings,
+                transactions
+            }
+        });
+    } catch (error) {
+        console.error("Financial fetch error:", error);
+        res.status(500).json({ success: false, message: "Failed to fetch financials" });
+    }
+};
+
+// --- NEW AUDIT CONTROL ---
+
+export const getAuditLogs = async (req, res) => {
+    try {
+        const logs = await AuditLog.find({})
+            .sort({ timestamp: -1 })
+            .limit(100);
+
+        res.status(200).json({
+            success: true,
+            data: logs
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Failed to fetch system logs" });
     }
 };

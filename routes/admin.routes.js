@@ -8,7 +8,9 @@ import {
     getAllAdmins,
     getAllUsersAdmin,
     updateUserAdmin,
-    deleteUserAdmin
+    deleteUserAdmin,
+    getFinancialData,
+    getAuditLogs
 } from "../controllers/admin.controller.js";
 import { requireAuth, restrict } from "../middlewares/auth.middleware.js";
 
@@ -23,6 +25,12 @@ adminRouter.get("/health", (req, res) => res.json({ status: "admin-router-active
 
 // Get system stats - SUPERADMIN ONLY
 adminRouter.get("/platform-stats", restrict(["superadmin"]), getSystemStats);
+
+// Get financial data - SUPERADMIN ONLY
+adminRouter.get("/financials", restrict(["superadmin"]), getFinancialData);
+
+// Get audit logs - SUPERADMIN ONLY
+adminRouter.get("/audit-logs", restrict(["superadmin"]), getAuditLogs);
 
 // Get all providers (including pending, approved, rejected)
 adminRouter.get("/providers", getAllProvidersAdmin);
