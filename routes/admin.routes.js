@@ -6,6 +6,9 @@ import {
     createAdminUser,
     getSystemStats,
     getAllAdmins,
+    getAllUsersAdmin,
+    updateUserAdmin,
+    deleteUserAdmin,
     getFinancialData,
     getAuditLogs,
     getAllAppointmentsAdmin,
@@ -17,7 +20,10 @@ import { requireAuth, restrict } from "../middlewares/auth.middleware.js";
 
 const adminRouter = Router();
 
-// All routes require admin authentication
+// Publicly accessible configurations (e.g., service categories for providers)
+adminRouter.get("/public/config", getPlatformConfig);
+
+// All routes below require admin authentication
 adminRouter.use(requireAuth);
 adminRouter.use(restrict(["admin", "superadmin"]));
 
